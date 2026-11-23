@@ -1,0 +1,33 @@
+# Build output
+**/bin/
+**/obj/
+*.dll
+*.exe
+*.pdb
+*.cache
+*.nupkg
+
+# IDE / OS
+.vs/
+.vscode/
+*.user
+*.suo
+*.userprefs
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# Local artifacts (large CSVs, logs, backups)
+*.csv
+*.log
+*.ndjson
+logs/*
+artifacts/*
+backups/*
+!logs/.gitkeep
+!artifacts/.gitkeep
+!backups/.gitkeep
+
+# Temp
+*.tmp
+*~
