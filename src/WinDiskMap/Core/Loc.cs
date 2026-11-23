@@ -34,8 +34,8 @@ namespace WinDiskMap.Core
             get
             {
                 return _ru
-                    ? " ↑↓ навигация  ← свернуть/к родителю  → развернуть  Enter переключить  f фильтр  s сортировка  e экспорт  Del удалить  q выход"
-                    : " ↑↓ navigate  ← collapse/parent  → expand  Enter toggle  f filter  s sort  e export  Del delete  q quit";
+                    ? " ↑↓ навигация  ← свернуть/к родителю  → развернуть  Enter открыть файл/папку  f фильтр  s сортировка  e экспорт  Del удалить  q выход"
+                    : " ↑↓ navigate  ← collapse/parent  → expand  Enter open file/folder  f filter  s sort  e export  Del delete  q quit";
             }
         }
 

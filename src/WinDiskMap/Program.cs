@@ -44,9 +44,10 @@ namespace WinDiskMap
   WinDiskMap --remote hostB --path C:\ --csv h.csv   удалённый скан C:\ на hostB (WinRM)
 
 TUI (открывается сразу, дерево пополняется по мере сканирования):
-  ↑↓ навигация   ← свернуть/к родителю   → развернуть   Enter переключить
+  ↑↓ навигация   ← свернуть/к родителю   → развернуть   Enter открыть файл/переключить папку
   f фильтр (папки / папки+файлы / tmp / дампы)   s сортировка
   e экспорт дерева в CSV   Del удалить (с подтверждением)   колесо мыши — прокрутка   q выход
+  окно перерисовывается автоматически при изменении размера консоли
 
 MFT-режим (прямое чтение $MFT, скорость WizTree) требует запуска от администратора
 и работает только с локального тома NTFS. Без админа, для сетевых (UNC) путей и
@@ -87,9 +88,10 @@ Examples:
   WinDiskMap --remote hostB --path C:\ --csv h.csv   remote scan of C:\ on hostB (WinRM)
 
 TUI (opens immediately, the tree fills in as the scan progresses):
-  ↑↓ navigate   ← collapse/parent   → expand   Enter toggle
+  ↑↓ navigate   ← collapse/parent   → expand   Enter open file/toggle folder
   f filter (folders / folders+files / tmp / dumps)   s sort
   e export tree to CSV   Del delete (with confirmation)   mouse wheel — scroll   q quit
+  the window redraws automatically when the console is resized
 
 MFT mode (direct $MFT read, WizTree-like speed) requires administrator rights and
 works only on a local NTFS volume. Without admin, for network (UNC) paths and

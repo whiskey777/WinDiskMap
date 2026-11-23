@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Text;
 using System.Threading;
@@ -26,6 +27,12 @@ namespace WinDiskMap.Tui
         private const string ColorFile = "\x1b[37m";
         private const string ColorTemp = "\x1b[33m";
         private const string ColorDump = "\x1b[35m";
+        private const string ColorWarn = "\x1b[1;91m";   // ярко-красный: опасные действия
+
+        // Воздух между колонками. 2 пробела — достаточно для читаемости; перед
+        // группой дат делаем шире, чтобы отделить «временны́е» колонки от размеров.
+        private const int Gutter = 2;
+        private const int GroupGap = 4;
 
         private struct Row
         {
@@ -52,17 +59,6 @@ namespace WinDiskMap.Tui
             public int SizeW;
             public int PctW;
             public int DateW;
-
-            public int MetaWidth
-            {
-                get
-                {
-                    int w = 1 + SizeW;                       // ведущий пробел + размер
-                    if (Percent) w += 1 + PctW;
-                    if (Dates) w += 2 * (1 + DateW);
-                    return w;
-                }
-            }
         }
 
         private readonly ScanSession _s;
@@ -76,6 +72,8 @@ namespace WinDiskMap.Tui
         private bool _running = true;
         private bool _doneHandled;
         private long _filesDone = -1;       // счётчики, закэшированные после завершения скана
+        private int _lastWidth = -1;        // для авто-перерисовки при ресайзе консоли
+        private int _lastHeight = -1;
 
         public TuiApp(ScanSession session)
         {
@@ -90,29 +88,46 @@ namespace WinDiskMap.Tui
             {
                 while (_running)
                 {
-                    UpdateState();
-                    RebuildRows();
-                    Render();
+                    // Ввод опрашивается и после завершения скана: блокирующий ReadKey
+                    // «замораживал» бы экран при ресайзе окна.
+                    bool hadInput = false;
+                    try
+                    {
+                        if (Console.KeyAvailable)
+                        {
+                            HandleInput(Console.ReadKey(true));
+                            hadInput = true;
+                        }
+                    }
+                    catch (InvalidOperationException)
+                    {
+                        _running = false; // ввод перенаправлен — консоли нет
+                        break;
+                    }
 
-                    if (!_s.Done)
+                    UpdateState();
+
+                    // Размер консоли меняется без нажатия клавиш — сравниваем сырые
+                    // значения (SafeWidth clamp'ит минимум, поэтому здесь не подходит).
+                    int rawW = RawWidth();
+                    int rawH = RawHeight();
+                    bool resized = rawW != _lastWidth || rawH != _lastHeight;
+                    if (resized) { _lastWidth = rawW; _lastHeight = rawH; }
+
+                    if (resized)
                     {
-                        PollInput();
-                        Thread.Sleep(90);
+                        try { Console.Write("\x1b[2J"); } catch { }
                     }
-                    else
+
+                    // Пока идёт скан — рисуем каждый проход (живой прогресс); после —
+                    // только по действию пользователя или изменению размера окна.
+                    if (resized || hadInput || !_s.Done)
                     {
-                        ConsoleKeyInfo key;
-                        try
-                        {
-                            key = Console.ReadKey(true);
-                        }
-                        catch (InvalidOperationException)
-                        {
-                            _running = false; // ввод перенаправлен — консоли нет
-                            break;
-                        }
-                        HandleInput(key);
+                        RebuildRows();
+                        Render();
                     }
+
+                    if (!hadInput) Thread.Sleep(60);
                 }
             }
             finally
@@ -149,18 +164,6 @@ namespace WinDiskMap.Tui
         }
 
         // ---------- Ввод ----------
-
-        private void PollInput()
-        {
-            try
-            {
-                if (Console.KeyAvailable) HandleInput(Console.ReadKey(true));
-            }
-            catch (InvalidOperationException)
-            {
-                _running = false; // нет консоли
-            }
-        }
 
         private void HandleInput(ConsoleKeyInfo key)
         {
@@ -292,10 +295,18 @@ namespace WinDiskMap.Tui
                 case ConsoleKey.Enter:
                     {
                         Row row = CurrentRow();
-                        if (row.IsDir && row.Node != _root)
+                        if (row.Hint) break;
+                        if (row.IsDir)
                         {
-                            row.Node.Expanded = !row.Node.Expanded;
-                            _status = "";
+                            if (row.Node != _root)
+                            {
+                                row.Node.Expanded = !row.Node.Expanded;
+                                _status = "";
+                            }
+                        }
+                        else if (row.File != null)
+                        {
+                            OpenFile(row);
                         }
                     }
                     break;
@@ -366,6 +377,27 @@ namespace WinDiskMap.Tui
             }
         }
 
+        // ---------- Открытие файла ----------
+
+        /// <summary>Стандартный запуск через ассоциации Windows (ShellExecute).</summary>
+        private void OpenFile(Row row)
+        {
+            try
+            {
+                var psi = new ProcessStartInfo
+                {
+                    FileName = row.FullPath,
+                    UseShellExecute = true
+                };
+                Process.Start(psi);
+                _status = Loc.T("Открыто: ", "Opened: ") + row.Name;
+            }
+            catch (Exception ex)
+            {
+                _status = Loc.T("Не удалось открыть: ", "Cannot open: ") + ex.Message;
+            }
+        }
+
         // ---------- Удаление объекта ----------
 
         private void DeleteCurrent()
@@ -429,27 +461,49 @@ namespace WinDiskMap.Tui
             _status = Loc.T("Удалено: ", "Deleted: ") + row.Name;
         }
 
-        /// <summary>Модальный запрос y/N на последней строке экрана.</summary>
+        /// <summary>
+        /// Модальный запрос y/N: центрированный блок с ярко-красной рамкой. Для
+        /// деструктивного действия это ключевые правила TUI — высокий контраст,
+        /// центр экрана (туда смотрит глаз) и безопасный ответ по умолчанию (N).
+        /// </summary>
         private static bool Confirm(string question)
         {
             int width = SafeWidth();
             int height = SafeHeight();
+            int boxW = Math.Min(Math.Max(width - 6, 24), Math.Max(46, question.Length + 6));
+            int x = Math.Max(1, (width - boxW) / 2 + 1);
+            int y = Math.Max(2, height / 2 - 1);
+
+            string title = " " + Loc.T("Удаление", "Delete") + " ";
+            string top = "╔" + title
+                         + new string('═', Math.Max(0, boxW - 2 - title.Length)) + "╗";
+            string mid = "║ " + PadOrTruncate(question, boxW - 4) + " ║";
+            string bot = "╚" + new string('═', Math.Max(0, boxW - 2)) + "╝";
+
             try
             {
-                Console.Write("\x1b[" + height + ";1H\x1b[2K");
-                Console.Write(ColorHeader + PadOrTruncate(question, width) + ColorReset);
+                var sb = new StringBuilder(512);
+                sb.Append("\x1b[").Append(y).Append(';').Append(x).Append('H').Append(ColorWarn);
+                sb.Append(top).Append("\x1b[K\r\n");
+                sb.Append("\x1b[").Append(y + 1).Append(';').Append(x).Append('H');
+                sb.Append(mid).Append("\x1b[K\r\n");
+                sb.Append("\x1b[").Append(y + 2).Append(';').Append(x).Append('H');
+                sb.Append(bot).Append("\x1b[K");
+                sb.Append("\x1b[").Append(y + 1).Append(';').Append(x + 2).Append('H');
+                Console.Write(sb.ToString());
+
                 while (true)
                 {
                     ConsoleKeyInfo key = Console.ReadKey(true);
                     if (key.Key == ConsoleKey.Y)
                     {
-                        Console.Write("\x1b[2K");
+                        Console.Write(ColorReset + "\x1b[2K");
                         return true;
                     }
                     if (key.Key == ConsoleKey.Escape || key.Key == ConsoleKey.N
                         || key.Key == ConsoleKey.Enter)
                     {
-                        Console.Write("\x1b[2K");
+                        Console.Write(ColorReset + "\x1b[2K");
                         return false;
                     }
                 }
@@ -508,11 +562,16 @@ namespace WinDiskMap.Tui
             int total = dirs.Count + files.Count;
             if (total == 0)
             {
-                // "<Empty>" вместо "..." когда нечего показать (пустая папка или
-                // активный фильтр скрыл всё). Пока скан идёт, остаётся "..." — данные
-                // могут ещё появиться.
+                // Три состояния: во время скана "..." (данные могут ещё появиться),
+                // после — "<Пусто>" если папка реально пуста, иначе "<Отфильтровано>"
+                // (объекты есть, но активный фильтр их скрывает).
                 if (dir.Expanded)
                 {
+                    string hint = !_s.Done
+                        ? "..."
+                        : (dir.Dirs.Count == 0 && dir.FileCount == 0)
+                            ? Loc.T("<Пусто>", "<Empty>")
+                            : Loc.T("<Отфильтровано>", "<Filtered>");
                     _rows.Add(new Row
                     {
                         Hint = true,
@@ -520,9 +579,7 @@ namespace WinDiskMap.Tui
                         Parent = dir,
                         Depth = dir.Depth + 1,
                         Prefix = childPrefix + "└─ ",
-                        Name = _s.Done
-                            ? Loc.T("<Пусто>", "<Empty>")
-                            : "...",
+                        Name = hint,
                         FullPath = dir.FullPath + "\\...",
                         Size = 0,
                         Category = Category.File
@@ -695,16 +752,24 @@ namespace WinDiskMap.Tui
             sb.Append(PadOrTruncate(text, width));
         }
 
+        private static int MetaWidth(Columns c)
+        {
+            int w = Gutter + c.SizeW;
+            if (c.Percent) w += Gutter + c.PctW;
+            if (c.Dates)
+                w += (c.Percent ? GroupGap : Gutter) + c.DateW + Gutter + c.DateW;
+            return w;
+        }
+
         private static Columns MeasureColumns(int width)
         {
-            var c = new Columns { SizeW = 10, PctW = 7, DateW = 16 };
-            int withDates = 1 + c.SizeW + 1 + c.PctW + 2 * (1 + c.DateW);
-            int withPct = 1 + c.SizeW + 1 + c.PctW;
+            var full = new Columns { SizeW = 10, PctW = 7, DateW = 16, Percent = true, Dates = true };
+            var noDates = new Columns { SizeW = 10, PctW = 7, DateW = 16, Percent = true };
             // Оставляем минимум места под имя/дерево; на узком терминале сначала
             // пропадают даты, затем процент, размер остаётся всегда.
-            if (width >= 24 + withDates) { c.Percent = true; c.Dates = true; }
-            else if (width >= 20 + withPct) { c.Percent = true; }
-            return c;
+            if (width >= 24 + MetaWidth(full)) return full;
+            if (width >= 20 + MetaWidth(noDates)) return noDates;
+            return new Columns { SizeW = 10, PctW = 7, DateW = 16 };
         }
 
         private static void AppendColumnHeader(StringBuilder sb, int width, Columns c)
@@ -722,13 +787,15 @@ namespace WinDiskMap.Tui
 
         private static string ColumnMeta(Columns c)
         {
-            var sb = new StringBuilder(64);
-            sb.Append(' ').Append(PadLeft(Loc.T("Размер", "Size"), c.SizeW));
-            if (c.Percent) sb.Append(' ').Append(PadLeft("%", c.PctW));
+            var sb = new StringBuilder(80);
+            sb.Append(new string(' ', Gutter)).Append(PadLeft(Loc.T("Размер", "Size"), c.SizeW));
+            if (c.Percent) sb.Append(new string(' ', Gutter)).Append(PadLeft("%", c.PctW));
             if (c.Dates)
             {
-                sb.Append(' ').Append(PadLeft(Loc.T("Создан", "Created on"), c.DateW));
-                sb.Append(' ').Append(PadLeft(Loc.T("Посл. запись", "Last write"), c.DateW));
+                sb.Append(new string(' ', c.Percent ? GroupGap : Gutter));
+                sb.Append(PadLeft(Loc.T("Создан", "Created on"), c.DateW));
+                sb.Append(new string(' ', Gutter))
+                  .Append(PadLeft(Loc.T("Посл. запись", "Last write"), c.DateW));
             }
             return sb.ToString();
         }
@@ -741,14 +808,17 @@ namespace WinDiskMap.Tui
 
         private static string BuildMeta(Row row, Columns c, long rootSize)
         {
-            var sb = new StringBuilder(64);
-            sb.Append(' ').Append(PadLeft(Format.Bytes(row.Size), c.SizeW));
+            var sb = new StringBuilder(80);
+            sb.Append(new string(' ', Gutter)).Append(PadLeft(Format.Bytes(row.Size), c.SizeW));
             if (c.Percent)
-                sb.Append(' ').Append(PadLeft(Format.Percent(row.Size, rootSize), c.PctW));
+                sb.Append(new string(' ', Gutter))
+                  .Append(PadLeft(Format.Percent(row.Size, rootSize), c.PctW));
             if (c.Dates)
             {
-                sb.Append(' ').Append(PadLeft(Format.Time(row.CreatedUtc), c.DateW));
-                sb.Append(' ').Append(PadLeft(Format.Time(row.LastWriteUtc), c.DateW));
+                sb.Append(new string(' ', c.Percent ? GroupGap : Gutter));
+                sb.Append(PadLeft(Format.Time(row.CreatedUtc), c.DateW));
+                sb.Append(new string(' ', Gutter))
+                  .Append(PadLeft(Format.Time(row.LastWriteUtc), c.DateW));
             }
             return sb.ToString();
         }
@@ -885,6 +955,17 @@ namespace WinDiskMap.Tui
             if (width <= 0) return text;
             if (text.Length > width) return text.Substring(0, Math.Max(0, width - 1)) + "…";
             return text + new string(' ', width - text.Length);
+        }
+
+        /// <summary>Сырой размер окна — только для обнаружения ресайза (без clamp'а).</summary>
+        private static int RawWidth()
+        {
+            try { return Console.WindowWidth; } catch { return 0; }
+        }
+
+        private static int RawHeight()
+        {
+            try { return Console.WindowHeight; } catch { return 0; }
         }
 
         private static int SafeWidth()
