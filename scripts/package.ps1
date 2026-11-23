@@ -40,7 +40,7 @@ DiskMap $Version — portable ($variant)
 - Прямое чтение `$MFT` и WinRM-агент (-ExecutionPolicy Bypass) могут появиться
   в телеметрии EDR как подозрительные. Для минимального шума используйте --no-mft
   и локальный запуск без WinRM.
-- Подробности: README.md / STATUS.md в репозитории проекта.
+- Подробности: README.md в репозитории проекта.
 
 Лицензия: MIT (файл LICENSE.txt).
 "@

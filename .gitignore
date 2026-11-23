@@ -31,3 +31,10 @@ backups/*
 # Temp
 *.tmp
 *~
+
+# Internal handoff kept locally only (not published to the public repo)
+/STATUS.md
+/docs/
+/verification/
+/scripts/compare-csv.ps1
+/scripts/verify-against-wiztree.ps1
