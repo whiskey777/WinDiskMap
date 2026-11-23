@@ -28,6 +28,7 @@ namespace WinDiskMap.Tui
         private const string ColorTemp = "\x1b[33m";
         private const string ColorDump = "\x1b[35m";
         private const string ColorWarn = "\x1b[1;91m";   // ярко-красный: опасные действия
+        private const string ColorSortActive = "\x1b[1;7;33m"; // инверсия + жёлтый: активная колонка
 
         // Воздух между колонками. 2 пробела — достаточно для читаемости; перед
         // группой дат делаем шире, чтобы отделить «временны́е» колонки от размеров.
@@ -67,6 +68,7 @@ namespace WinDiskMap.Tui
         private int _cursor;
         private int _top;
         private SortMode _sort = SortMode.Size;
+        private bool _sortDesc = true;      // размер ↓ по умолчанию (как в WizTree)
         private FilterMode _filter = FilterMode.Folders;
         private string _status = "";
         private bool _running = true;
@@ -91,7 +93,11 @@ namespace WinDiskMap.Tui
                     // Ввод опрашивается и после завершения скана: блокирующий ReadKey
                     // «замораживал» бы экран при ресайзе окна.
                     bool hadInput = false;
-                    bool wasDone = _s.Done;
+                    // Флаг меняется ТОЛЬКО здесь, в UI-потоке (UpdateState), поэтому
+                    // переход гарантированно виден. Сырой _s.Done выставляется сканером
+                    // во время Sleep() и к началу следующего прохода уже равен true —
+                    // детектировать завершение по нему ненадёжно (MFT-ветка под админом).
+                    bool wasDoneHandled = _doneHandled;
                     try
                     {
                         if (Console.KeyAvailable)
@@ -123,7 +129,7 @@ namespace WinDiskMap.Tui
                     // Пока идёт скан — рисуем каждый проход (живой прогресс); после —
                     // только по действию пользователя, изменению размера или в момент
                     // завершения (иначе "<Пусто>" появится лишь после следующей клавиши).
-                    bool justDone = !wasDone && _s.Done;
+                    bool justDone = !wasDoneHandled && _doneHandled;
                     if (resized || hadInput || !_s.Done || justDone)
                     {
                         RebuildRows();
@@ -320,11 +326,21 @@ namespace WinDiskMap.Tui
                     break;
 
                 case ConsoleKey.S:
-                    _sort = _sort == SortMode.Size ? SortMode.Name : SortMode.Size;
-                    _status = Loc.T("Сортировка: ", "Sort: ")
-                              + (_sort == SortMode.Size
-                                  ? Loc.T("по размеру", "size")
-                                  : Loc.T("по имени", "name"));
+                    // Цикл из 4 состояний: размер ↓ → размер ↑ → имя ↑ → имя ↓.
+                    // Повторное нажатие на той же колонке меняет направление,
+                    // следующее — переходит к другой колонке с естественным для неё
+                    // порядком (размер — по убыванию, имя — по возрастанию).
+                    if (_sort == SortMode.Size)
+                    {
+                        if (_sortDesc) _sortDesc = false;
+                        else { _sort = SortMode.Name; _sortDesc = false; }
+                    }
+                    else
+                    {
+                        if (!_sortDesc) _sortDesc = true;
+                        else { _sort = SortMode.Size; _sortDesc = true; }
+                    }
+                    _status = Loc.T("Сортировка: ", "Sort: ") + SortCaption();
                     break;
 
                 case ConsoleKey.E:
@@ -639,23 +655,65 @@ namespace WinDiskMap.Tui
 
         private List<FileRow> FilteredFiles(Node dir)
         {
+            // GetFileRows() возвращает кэшированный список, отсортированный по убыванию
+            // размера, — его нельзя менять на месте. Всегда делаем свою копию.
             List<FileRow> all = dir.GetFileRows();
-            if (_filter == FilterMode.Files) return all;
-            Category want = _filter == FilterMode.Temp ? Category.Temp : Category.Dump;
-            var result = new List<FileRow>();
+            var result = new List<FileRow>(all.Count);
             for (int i = 0; i < all.Count; i++)
-                if (all[i].Category == want) result.Add(all[i]);
+            {
+                FileRow f = all[i];
+                if (_filter == FilterMode.Files
+                    || f.Category == (_filter == FilterMode.Temp ? Category.Temp : Category.Dump))
+                    result.Add(f);
+            }
+            SortFileRows(result);
             return result;
+        }
+
+        private void SortFileRows(List<FileRow> rows)
+        {
+            if (_sort == SortMode.Size)
+            {
+                rows.Sort((a, b) =>
+                {
+                    int c = a.Size.CompareTo(b.Size);
+                    return _sortDesc ? -c : c;
+                });
+            }
+            else
+            {
+                rows.Sort((a, b) =>
+                {
+                    int c = string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
+                    return _sortDesc ? -c : c;
+                });
+            }
         }
 
         private List<Node> SortedDirs(Node dir)
         {
             var list = new List<Node>(dir.Dirs);
             if (_sort == SortMode.Size)
-                list.Sort((a, b) => b.Size.CompareTo(a.Size));
+                list.Sort((a, b) =>
+                {
+                    int c = a.Size.CompareTo(b.Size);
+                    return _sortDesc ? -c : c;
+                });
             else
-                list.Sort((a, b) => string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase));
+                list.Sort((a, b) =>
+                {
+                    int c = string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
+                    return _sortDesc ? -c : c;
+                });
             return list;
+        }
+
+        private string SortCaption()
+        {
+            string name = _sort == SortMode.Size
+                ? Loc.T("размер", "size")
+                : Loc.T("имя", "name");
+            return name + " " + (_sortDesc ? "↓" : "↑");
         }
 
         private Row CurrentRow()
@@ -722,7 +780,7 @@ namespace WinDiskMap.Tui
             sb.Append(ColorReset);
             sb.Append("\x1b[K\r\n");
 
-            AppendColumnHeader(sb, width, cols);
+            AppendColumnHeader(sb, width, cols, _sort, _sortDesc);
             sb.Append(ColorReset);
             sb.Append("\x1b[K\r\n");
 
@@ -734,8 +792,7 @@ namespace WinDiskMap.Tui
                 sb.Append("\x1b[K\r\n");
             }
 
-            AppendFooterLines(sb, width);
-            sb.Append("\x1b[J");
+            AppendFooterLines(sb, width, height);
             Console.Write(sb.ToString());
         }
 
@@ -775,32 +832,47 @@ namespace WinDiskMap.Tui
             return new Columns { SizeW = 10, PctW = 7, DateW = 16 };
         }
 
-        private static void AppendColumnHeader(StringBuilder sb, int width, Columns c)
+        private static void AppendColumnHeader(StringBuilder sb, int width, Columns c,
+                                               SortMode sort, bool sortDesc)
         {
-            string left = " " + Loc.T("Путь", "Path");
-            sb.Append(ColorHeader);
-            sb.Append(left);
+            string arrow = sortDesc ? "↓" : "↑";
 
-            string meta = ColumnMeta(c);
-            int pad = width - 1 - left.Length - meta.Length;
+            // Активная колонка выделяется инверсией + жёлтым и несёт стрелку направления;
+            // остальные остаются обычной инверсной шапкой. Ширина колонок фиксированная,
+            // поэтому вставка стрелки не сдвигает правые колонки.
+            bool nameActive = sort == SortMode.Name;
+            string left = " " + Loc.T("Путь", "Path") + (nameActive ? " " + arrow : "");
+            AppendHeaderSegment(sb, left, nameActive);
+
+            int pad = width - 1 - left.Length - MetaWidth(c);
             if (pad < 1) pad = 1;
+            sb.Append(ColorHeader); // не растягиваем подсветку активной колонки на весь зазор
             sb.Append(new string(' ', pad));
-            sb.Append(meta);
-        }
 
-        private static string ColumnMeta(Columns c)
-        {
-            var sb = new StringBuilder(80);
-            sb.Append(new string(' ', Gutter)).Append(PadLeft(Loc.T("Размер", "Size"), c.SizeW));
-            if (c.Percent) sb.Append(new string(' ', Gutter)).Append(PadLeft("%", c.PctW));
+            bool sizeActive = sort == SortMode.Size;
+            string sizeLabel = PadLeft(
+                Loc.T("Размер", "Size") + (sizeActive ? " " + arrow : ""), c.SizeW);
+            AppendHeaderSegment(sb, new string(' ', Gutter), false);
+            AppendHeaderSegment(sb, sizeLabel, sizeActive);
+
+            if (c.Percent)
+            {
+                AppendHeaderSegment(sb, new string(' ', Gutter), false);
+                AppendHeaderSegment(sb, PadLeft("%", c.PctW), false);
+            }
             if (c.Dates)
             {
-                sb.Append(new string(' ', c.Percent ? GroupGap : Gutter));
-                sb.Append(PadLeft(Loc.T("Создан", "Created on"), c.DateW));
-                sb.Append(new string(' ', Gutter))
-                  .Append(PadLeft(Loc.T("Посл. запись", "Last write"), c.DateW));
+                AppendHeaderSegment(sb, new string(' ', c.Percent ? GroupGap : Gutter), false);
+                AppendHeaderSegment(sb, PadLeft(Loc.T("Создан", "Created on"), c.DateW), false);
+                AppendHeaderSegment(sb, new string(' ', Gutter), false);
+                AppendHeaderSegment(sb, PadLeft(Loc.T("Посл. запись", "Last write"), c.DateW), false);
             }
-            return sb.ToString();
+        }
+
+        private static void AppendHeaderSegment(StringBuilder sb, string text, bool active)
+        {
+            sb.Append(active ? ColorSortActive : ColorHeader);
+            sb.Append(text);
         }
 
         private static string PadLeft(string text, int width)
@@ -855,17 +927,23 @@ namespace WinDiskMap.Tui
             }
         }
 
-        private void AppendFooterLines(StringBuilder sb, int width)
+        private void AppendFooterLines(StringBuilder sb, int width, int height)
         {
+            // Сначала чистим хвост экрана после последней строки дерева, затем
+            // позиционируем обе статусные строки АБСОЛЮТНО по нижнему краю окна.
+            // Иначе они «прилипают» к дереву и прыгают при раскрытии/фильтрации.
+            sb.Append("\x1b[J");
+            sb.Append("\x1b[").Append(height - 1).Append(";1H");
+
             string line1 = " " + (_cursor + 1).ToString("N0") + "/" + _rows.Count.ToString("N0")
                 + " │ " + Loc.T("Фильтр", "Filter") + ": " + FilterName(_filter)
-                + " │ " + Loc.T("Сортировка", "Sort") + ": " + (_sort == SortMode.Size
-                    ? Loc.T("размер", "size")
-                    : Loc.T("имя", "name"))
+                + " │ " + Loc.T("Сортировка", "Sort") + ": " + SortCaption()
                 + (_status.Length > 0 ? " │ " + _status : "");
             sb.Append(ColorDim);
             sb.Append(PadOrTruncate(line1, width));
             sb.Append("\x1b[K\r\n");
+
+            sb.Append("\x1b[").Append(height).Append(";1H");
             sb.Append(PadOrTruncate(Loc.KeysHint, width));
             sb.Append("\x1b[K");
         }

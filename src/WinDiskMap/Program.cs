@@ -45,7 +45,7 @@ namespace WinDiskMap
 
 TUI (открывается сразу, дерево пополняется по мере сканирования):
   ↑↓ навигация   ← свернуть/к родителю   → развернуть   Enter открыть файл/переключить папку
-  f фильтр (папки / папки+файлы / tmp / дампы)   s сортировка
+  f фильтр (папки / папки+файлы / tmp / дампы)   s сортировка (размер↓/↑, имя↑/↓)
   e экспорт дерева в CSV   Del удалить (с подтверждением)   колесо мыши — прокрутка   q выход
   окно перерисовывается автоматически при изменении размера консоли
 
@@ -89,7 +89,7 @@ Examples:
 
 TUI (opens immediately, the tree fills in as the scan progresses):
   ↑↓ navigate   ← collapse/parent   → expand   Enter open file/toggle folder
-  f filter (folders / folders+files / tmp / dumps)   s sort
+  f filter (folders / folders+files / tmp / dumps)   s sort (size↓/↑, name↑/↓)
   e export tree to CSV   Del delete (with confirmation)   mouse wheel — scroll   q quit
   the window redraws automatically when the console is resized
 
