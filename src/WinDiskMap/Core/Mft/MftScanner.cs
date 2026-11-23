@@ -184,9 +184,11 @@ namespace WinDiskMap.Core.Mft
             bool reparse = false;
             long fnSize = 0;
             bool haveFnSize = false;
-            // Даты: $FILE_NAME приоритетнее — именно его читает WizTree в MFT-режиме
-            // (и именно его показывает Проводник при листинге каталога). $STANDARD_INFORMATION
-            // служит фолбэком для записей без FN. FILETIME в UTC.
+            // Даты: $STANDARD_INFORMATION приоритетнее. Это те же значения, что отдаёт
+            // Windows API (Get-Item.LastWriteTime / CreateFile) и что показывает Проводник;
+            // $FILE_NAME — фолбэк для повреждённых записей без SI. FILETIME в UTC.
+            // Приоритет FN проверяли на реальных отчётах: он дал 32504 расхождения вместо
+            // 2368 у SI, то есть однозначно ухудшил совпадение с реальными метаданными.
             long siCreated = 0, siLastWrite = 0;
             long fnCreated = 0, fnLastWrite = 0;
 
@@ -287,11 +289,9 @@ namespace WinDiskMap.Core.Mft
                 gotSize = true;
             }
 
-            // WizTree берёт даты из $FILE_NAME ($MFT), а не из $STANDARD_INFORMATION.
-            // Разница может быть месяцами: SI обновляется при записи файла, FN — при
-            // операциях с именем/каталогом. Для совпадения экспорта приоритет у FN.
-            long createdUtc = fnCreated != 0 ? fnCreated : siCreated;
-            long lastWriteUtc = fnLastWrite != 0 ? fnLastWrite : siLastWrite;
+            // SI = реальные time-атрибуты файла, FN = кэш имён; приоритет у SI.
+            long createdUtc = siCreated != 0 ? siCreated : fnCreated;
+            long lastWriteUtc = siLastWrite != 0 ? siLastWrite : fnLastWrite;
 
             if (isExtension)
             {
@@ -384,7 +384,23 @@ namespace WinDiskMap.Core.Mft
                      .Append(" contentOfs=").Append(BitConverter.ToUInt16(rec, attrOfs + 0x14));
                 }
 
-                if (type == AttrFileName && nameLen == 0 && nonRes == 0)
+                if (type == AttrStdInfo && nameLen == 0 && nonRes == 0)
+                {
+                    // Полный набор FILETIME из $STANDARD_INFORMATION: создан, изменён,
+                    // изменена MFT-запись, прочитан. Нужен, чтобы на реальных данных
+                    // установить, какую именно дату показывает WizTree в колонке Modified.
+                    int contentLen = BitConverter.ToInt32(rec, attrOfs + 0x10);
+                    int contentOfs = BitConverter.ToUInt16(rec, attrOfs + 0x14);
+                    if (contentLen >= 0x18 && contentOfs >= 0x18 && attrOfs + contentOfs + contentLen <= recordSize)
+                    {
+                        int c = attrOfs + contentOfs;
+                        a.Append(" siCreated=").Append(FmtTime(BitConverter.ToInt64(rec, c)))
+                         .Append(" siAltered=").Append(FmtTime(BitConverter.ToInt64(rec, c + 0x08)))
+                         .Append(" siMftChanged=").Append(FmtTime(BitConverter.ToInt64(rec, c + 0x10)))
+                         .Append(" siRead=").Append(FmtTime(BitConverter.ToInt64(rec, c + 0x18)));
+                    }
+                }
+                else if (type == AttrFileName && nameLen == 0 && nonRes == 0)
                 {
                     int contentLen = BitConverter.ToInt32(rec, attrOfs + 0x10);
                     int contentOfs = BitConverter.ToUInt16(rec, attrOfs + 0x14);
@@ -395,7 +411,11 @@ namespace WinDiskMap.Core.Mft
                         byte ns = rec[c + 0x41];
                         string nm = nlen > 0 && c + 0x42 + nlen * 2 <= recordSize
                             ? Encoding.Unicode.GetString(rec, c + 0x42, nlen * 2) : "?";
-                        a.Append(" parent=").Append(BitConverter.ToInt64(rec, c) & 0x0000FFFFFFFFFFFF)
+                        a.Append(" fnCreated=").Append(FmtTime(BitConverter.ToInt64(rec, c + 0x08)))
+                         .Append(" fnAltered=").Append(FmtTime(BitConverter.ToInt64(rec, c + 0x10)))
+                         .Append(" fnMftChanged=").Append(FmtTime(BitConverter.ToInt64(rec, c + 0x18)))
+                         .Append(" fnRead=").Append(FmtTime(BitConverter.ToInt64(rec, c + 0x20)))
+                         .Append(" parent=").Append(BitConverter.ToInt64(rec, c) & 0x0000FFFFFFFFFFFF)
                          .Append(" ns=").Append(ns)
                          .Append(" fnReal=").Append(BitConverter.ToInt64(rec, c + 0x30))
                          .Append(" fnFlags=0x").Append(BitConverter.ToUInt32(rec, c + 0x38).ToString("X8"))
@@ -411,6 +431,21 @@ namespace WinDiskMap.Core.Mft
 
                 AppLog.Write("DEBUG", a.ToString());
                 attrOfs += len;
+            }
+        }
+
+        /// <summary>FILETIME в локальном времени с долями секунды — для отладочного дампа дат.</summary>
+        private static string FmtTime(long filetimeUtc)
+        {
+            if (filetimeUtc <= 0) return "0";
+            try
+            {
+                return DateTime.FromFileTimeUtc(filetimeUtc).ToLocalTime()
+                    .ToString("yyyy.MM.dd HH:mm:ss.fff", System.Globalization.CultureInfo.InvariantCulture);
+            }
+            catch
+            {
+                return "?";
             }
         }
 
