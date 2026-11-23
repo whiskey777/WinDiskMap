@@ -427,17 +427,29 @@ Exit codes: 0 — ok, 1 — bad arguments, 2 — scan error, 3 — no terminal."
                     long sec = (long)sw.Elapsed.TotalSeconds;
                     if (p.Phase != lastPhase || sec - lastPrint >= 5)
                     {
-                        Console.WriteLine("[{0}] {1} │ {2}: {3} │ {4}: {5} │ {6}: {7}",
+                        Console.WriteLine("[{0}] {1} │ {2}: {3} │ {4}: {5} │ {6}: {7}{8}",
                             sw.Elapsed.ToString(@"hh\:mm\:ss"),
                             p.Phase,
                             Loc.T("Файлов", "Files"), Format.Number(p.Files),
                             Loc.T("Папок", "Folders"), Format.Number(p.Dirs),
-                            Loc.T("Объём", "Size"), Format.Bytes(p.Bytes));
+                            Loc.T("Объём", "Size"), Format.Bytes(p.Bytes),
+                            string.IsNullOrEmpty(p.Note) ? "" : " │ " + p.Note);
                         lastPhase = p.Phase;
                         lastPrint = sec;
                     }
                     Thread.Sleep(400);
                 }
+
+                // Финальная строка: в MFT-режиме счётчики появляются только после построения
+                // дерева, а цикл уже завершился — без этой печати пользователь видит нули.
+                ScanProgress fin = session.Progress;
+                Console.WriteLine("[{0}] {1} │ {2}: {3} │ {4}: {5} │ {6}: {7}{8}",
+                    sw.Elapsed.ToString(@"hh\:mm\:ss"),
+                    fin.Phase,
+                    Loc.T("Файлов", "Files"), Format.Number(fin.Files),
+                    Loc.T("Папок", "Folders"), Format.Number(fin.Dirs),
+                    Loc.T("Объём", "Size"), Format.Bytes(fin.Bytes),
+                    string.IsNullOrEmpty(fin.Note) ? "" : " │ " + fin.Note);
             }
             else
             {

@@ -78,6 +78,11 @@ namespace WinDiskMap.Core.Mft
                     if (!runs[i].Sparse) mftBytes += runs[i].Clusters * clusterSize;
 
                 prog.Phase = Loc.T("Парсинг записей MFT", "Parsing MFT records");
+                prog.Note = Loc.T(
+                    "Счётчики файлов/папок появятся после разбора MFT",
+                    "File/folder counters appear after the MFT parse");
+                // Счётчики прогресса в MFT-режиме выставляются после BuildTree;
+                // до этого в строке статуса показывается число разобранных записей.
 
                 var collector = new Collector();
                 var scratch = new FnScratch(); // переиспользуемый буфер $FILE_NAME-ссылок записи

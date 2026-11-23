@@ -41,6 +41,14 @@ namespace WinDiskMap.Core
 
         public void AddFile(long size) { Interlocked.Increment(ref _files); Interlocked.Add(ref _bytes, size); }
         public void AddDir() { Interlocked.Increment(ref _dirs); }
+
+        /// <summary>Точные итоги (MFT-режим: дерево строится сразу после разбора, инкремента нет).</summary>
+        public void SetTotals(long files, long dirs, long bytes)
+        {
+            Volatile.Write(ref _files, files);
+            Volatile.Write(ref _dirs, dirs);
+            Volatile.Write(ref _bytes, bytes);
+        }
     }
 
     /// <summary>
@@ -54,6 +62,7 @@ namespace WinDiskMap.Core
         {
             try
             {
+                session.Progress.Phase = Loc.T("Подготовка", "Preparing");
                 string targetPath = Path.GetFullPath(session.DisplayPath).TrimEnd('\\');
                 session.DisplayPath = targetPath;
 
@@ -102,7 +111,12 @@ namespace WinDiskMap.Core
                                       "Directory not found on volume after MFT parse: ") + targetPath
                                 + " " + idx.DescribeLookupFailure(targetPath));
 
+                        session.Progress.Phase = Loc.T("Построение дерева", "Building tree");
                         Node node = idx.BuildTree(target, targetPath);
+                        // В MFT-режиме дерево появляется целиком в конце, поэтому счётчики
+                        // прогресса инкрементально не растут. Выставляем точные итоги сразу,
+                        // чтобы в headless/TUI не висели нули до самого финала.
+                        SetTotalsFromTree(node, session.Progress);
                         session.Mode = Loc.T("MFT (прямое чтение $MFT)", "MFT (direct $MFT read)");
                         lock (session.Sync) session.Root = node;
                         return;
@@ -138,6 +152,23 @@ namespace WinDiskMap.Core
             {
                 session.Done = true;
             }
+        }
+
+        /// <summary>Итоги по дереву для индикатора прогресса (те же правила, что в отчёте).</summary>
+        private static void SetTotalsFromTree(Node node, ScanProgress prog)
+        {
+            long files = 0, dirs = 0, bytes = 0;
+            CountForProgress(node, ref files, ref dirs, ref bytes);
+            prog.SetTotals(files, dirs, bytes);
+        }
+
+        private static void CountForProgress(Node node, ref long files, ref long dirs, ref long bytes)
+        {
+            if (!node.IsReparse) dirs++;
+            files += node.FileCount;
+            bytes += node.Size;
+            for (int i = 0; i < node.Dirs.Count; i++)
+                CountForProgress(node.Dirs[i], ref files, ref dirs, ref bytes);
         }
 
         public static bool IsAdministrator()

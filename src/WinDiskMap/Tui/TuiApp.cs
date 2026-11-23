@@ -1091,7 +1091,12 @@ namespace WinDiskMap.Tui
             sb.Append("  " + Loc.T("Папок", "Folders") + ":   " + Format.Number(prog.Dirs));
             sb.Append("\x1b[K\r\n");
             sb.Append("  " + Loc.T("Объём", "Size") + ":   " + Format.Bytes(prog.Bytes));
-            sb.Append("\x1b[K");
+            sb.Append("\x1b[K\r\n");
+            if (!string.IsNullOrEmpty(prog.Note))
+            {
+                sb.Append("  ").Append(prog.Note);
+                sb.Append("\x1b[K\r\n");
+            }
             sb.Append("\x1b[J");
             Console.Write(sb.ToString());
         }
