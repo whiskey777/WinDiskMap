@@ -29,7 +29,8 @@ namespace WinDiskMap.Core
         public Node Root { get { return _root; } }
 
         /// <summary>Создаёт корень поддерева. id корня — 0.</summary>
-        public void Begin(string displayRoot, bool reparse = false)
+        public void Begin(string displayRoot, bool reparse = false,
+            long createdUtc = 0, long lastWriteUtc = 0)
         {
             string rootName = Path.GetFileName(displayRoot);
             if (string.IsNullOrEmpty(rootName)) rootName = displayRoot;
@@ -41,6 +42,8 @@ namespace WinDiskMap.Core
                 Depth = 0,
                 IsDir = true,
                 IsReparse = reparse,
+                CreatedUtc = createdUtc,
+                LastWriteUtc = lastWriteUtc,
                 Parent = null,
                 Expanded = true
             };
@@ -48,7 +51,8 @@ namespace WinDiskMap.Core
             lock (_session.Sync) _session.Root = _root;
         }
 
-        public void Dir(int id, int parent, string name, bool reparse)
+        public void Dir(int id, int parent, string name, bool reparse,
+            long createdUtc = 0, long lastWriteUtc = 0)
         {
             Node parentNode = Resolve(parent);
             var child = new Node(null)
@@ -58,6 +62,8 @@ namespace WinDiskMap.Core
                 Depth = parentNode.Depth + 1,
                 IsDir = true,
                 IsReparse = reparse,
+                CreatedUtc = createdUtc,
+                LastWriteUtc = lastWriteUtc,
                 Parent = parentNode
             };
             lock (_session.Sync)
@@ -68,11 +74,12 @@ namespace WinDiskMap.Core
             if (_countProgress) _prog.AddDir();
         }
 
-        public void File(int id, int parent, string name, long size)
+        public void File(int id, int parent, string name, long size,
+            long createdUtc = 0, long lastWriteUtc = 0)
         {
             Node parentNode = Resolve(parent);
             Put(id, null);
-            lock (_session.Sync) parentNode.AddLiveFile(name, size);
+            lock (_session.Sync) parentNode.AddLiveFile(name, size, createdUtc, lastWriteUtc);
             if (_countProgress) _prog.AddFile(size);
         }
 

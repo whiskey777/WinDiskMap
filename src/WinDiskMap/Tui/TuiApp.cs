@@ -30,15 +30,39 @@ namespace WinDiskMap.Tui
         private struct Row
         {
             public Node Node;       // для строк-папок; null для файлов и заглушек
+            public Node Parent;     // владелец файла/заглушки — нужен при удалении
             public FileRow File;    // для файлных строк; null для папок/заглушек
             public bool IsDir;
-            public bool Hint;       // строка-заглушка "..." для пустых/скрытых фильтром папок
+            public bool Hint;       // строка-заглушка для пустых/скрытых фильтром папок
             public int Depth;
             public string Prefix;
             public string Name;
             public string FullPath;
             public long Size;
+            public long CreatedUtc;
+            public long LastWriteUtc;
             public Category Category;
+        }
+
+        /// <summary>Набор правых колонок, подогнанный под ширину терминала.</summary>
+        private struct Columns
+        {
+            public bool Percent;
+            public bool Dates;
+            public int SizeW;
+            public int PctW;
+            public int DateW;
+
+            public int MetaWidth
+            {
+                get
+                {
+                    int w = 1 + SizeW;                       // ведущий пробел + размер
+                    if (Percent) w += 1 + PctW;
+                    if (Dates) w += 2 * (1 + DateW);
+                    return w;
+                }
+            }
         }
 
         private readonly ScanSession _s;
@@ -196,7 +220,7 @@ namespace WinDiskMap.Tui
             else if (btn == 65) { _cursor += 3; ClampCursor(); }     // колесо вниз
             else if (btn == 0 && final == 'M')                       // левый клик
             {
-                int rowIndex = _top + (y - 2);                       // строка 1 — шапка
+                int rowIndex = _top + (y - 3);                       // строки 1-2 — шапка и заголовок колонок
                 if (rowIndex >= 0 && rowIndex < _rows.Count)
                 {
                     _cursor = rowIndex;
@@ -293,6 +317,10 @@ namespace WinDiskMap.Tui
                     ExportCsv();
                     break;
 
+                case ConsoleKey.Delete:
+                    DeleteCurrent();
+                    break;
+
                 case ConsoleKey.Q:
                 case ConsoleKey.Escape:
                     _running = false;
@@ -338,6 +366,100 @@ namespace WinDiskMap.Tui
             }
         }
 
+        // ---------- Удаление объекта ----------
+
+        private void DeleteCurrent()
+        {
+            Row row = CurrentRow();
+            if (row.Hint || (row.Node == null && row.File == null)) return;
+
+            if (!_s.Done)
+            {
+                _status = Loc.T("Сканирование ещё идёт — удаление недоступно",
+                                "Scan still running — delete unavailable");
+                return;
+            }
+            if (row.Node == _root)
+            {
+                _status = Loc.T("Корень скана удалять нельзя", "Cannot delete the scan root");
+                return;
+            }
+
+            string kind = row.IsDir
+                ? Loc.T("папку", "folder")
+                : Loc.T("файл", "file");
+            string question = " " + Loc.T("Удалить", "Delete") + " " + kind + " \""
+                              + row.Name + "\"? [y/N] ";
+            if (!Confirm(question))
+            {
+                _status = Loc.T("Отменено", "Cancelled");
+                return;
+            }
+
+            string error;
+            if (!DeleteHelper.TryDelete(row.FullPath, out error))
+            {
+                _status = Loc.T("Ошибка удаления: ", "Delete error: ") + error;
+                return;
+            }
+
+            // Диск уже изменился — синхронно убираем объект из модели, чтобы цифры
+            // в дереве не расходились с реальностью и следующий ре-рендер не вернул его.
+            lock (_s.Sync)
+            {
+                if (row.IsDir)
+                {
+                    Node dir = row.Node;
+                    Node parent = dir.Parent;
+                    if (parent != null)
+                    {
+                        parent.Dirs.Remove(dir);
+                        for (Node p = parent; p != null; p = p.Parent) p.Size -= dir.Size;
+                    }
+                }
+                else if (row.Parent != null && row.File != null)
+                {
+                    Node parent = row.Parent;
+                    if (parent.RemoveFileByName(row.File.Name, row.Size))
+                        for (Node p = parent; p != null; p = p.Parent) p.Size -= row.Size;
+                }
+                if (_s.Root != null) _filesDone = CountFiles(_s.Root);
+            }
+
+            _status = Loc.T("Удалено: ", "Deleted: ") + row.Name;
+        }
+
+        /// <summary>Модальный запрос y/N на последней строке экрана.</summary>
+        private static bool Confirm(string question)
+        {
+            int width = SafeWidth();
+            int height = SafeHeight();
+            try
+            {
+                Console.Write("\x1b[" + height + ";1H\x1b[2K");
+                Console.Write(ColorHeader + PadOrTruncate(question, width) + ColorReset);
+                while (true)
+                {
+                    ConsoleKeyInfo key = Console.ReadKey(true);
+                    if (key.Key == ConsoleKey.Y)
+                    {
+                        Console.Write("\x1b[2K");
+                        return true;
+                    }
+                    if (key.Key == ConsoleKey.Escape || key.Key == ConsoleKey.N
+                        || key.Key == ConsoleKey.Enter)
+                    {
+                        Console.Write("\x1b[2K");
+                        return false;
+                    }
+                }
+            }
+            catch (InvalidOperationException)
+            {
+                return false; // ввод перенаправлен — считаем отменой
+            }
+        }
+
         // ---------- Построение строк представления ----------
 
         private void RebuildRows()
@@ -363,6 +485,8 @@ namespace WinDiskMap.Tui
                     Name = root.FullPath,
                     FullPath = root.FullPath,
                     Size = root.Size,
+                    CreatedUtc = root.CreatedUtc,
+                    LastWriteUtc = root.LastWriteUtc,
                     Category = Category.Folder
                 });
                 AppendChildren(root, "");
@@ -384,16 +508,21 @@ namespace WinDiskMap.Tui
             int total = dirs.Count + files.Count;
             if (total == 0)
             {
-                // Пустая папка (или ничего не прошло фильтр): показываем заглушку.
+                // "<Empty>" вместо "..." когда нечего показать (пустая папка или
+                // активный фильтр скрыл всё). Пока скан идёт, остаётся "..." — данные
+                // могут ещё появиться.
                 if (dir.Expanded)
                 {
                     _rows.Add(new Row
                     {
                         Hint = true,
                         IsDir = false,
+                        Parent = dir,
                         Depth = dir.Depth + 1,
                         Prefix = childPrefix + "└─ ",
-                        Name = "...",
+                        Name = _s.Done
+                            ? Loc.T("<Пусто>", "<Empty>")
+                            : "...",
                         FullPath = dir.FullPath + "\\...",
                         Size = 0,
                         Category = Category.File
@@ -410,12 +539,15 @@ namespace WinDiskMap.Tui
                 _rows.Add(new Row
                 {
                     Node = child,
+                    Parent = dir,
                     IsDir = true,
                     Depth = dir.Depth + 1,
                     Prefix = childPrefix + (isLast ? "└─ " : "├─ "),
                     Name = child.Name,
                     FullPath = child.FullPath,
                     Size = child.Size,
+                    CreatedUtc = child.CreatedUtc,
+                    LastWriteUtc = child.LastWriteUtc,
                     Category = Category.Folder
                 });
                 if (child.Expanded)
@@ -429,12 +561,15 @@ namespace WinDiskMap.Tui
                 _rows.Add(new Row
                 {
                     File = file,
+                    Parent = dir,
                     IsDir = false,
                     Depth = dir.Depth + 1,
                     Prefix = childPrefix + (isLast ? "└─ " : "├─ "),
                     Name = file.Name,
                     FullPath = file.FullPath,
                     Size = file.Size,
+                    CreatedUtc = file.CreatedUtc,
+                    LastWriteUtc = file.LastWriteUtc,
                     Category = file.Category
                 });
             }
@@ -512,7 +647,8 @@ namespace WinDiskMap.Tui
                 return;
             }
 
-            int listHeight = Math.Max(1, height - 3);
+            Columns cols = MeasureColumns(width);
+            int listHeight = Math.Max(1, height - 4);
             if (_cursor < _top) _top = _cursor;
             if (_cursor >= _top + listHeight) _top = _cursor - listHeight + 1;
             int maxTop = Math.Max(0, _rows.Count - listHeight);
@@ -523,12 +659,17 @@ namespace WinDiskMap.Tui
             sb.Append("\x1b[H");
 
             AppendHeaderLine(sb, width);
+            sb.Append(ColorReset);
+            sb.Append("\x1b[K\r\n");
+
+            AppendColumnHeader(sb, width, cols);
+            sb.Append(ColorReset);
             sb.Append("\x1b[K\r\n");
 
             int end = Math.Min(_rows.Count, _top + listHeight);
             for (int i = _top; i < end; i++)
             {
-                AppendRowLine(sb, _rows[i], i == _cursor, width);
+                AppendRowLine(sb, _rows[i], i == _cursor, width, cols);
                 sb.Append(ColorReset);
                 sb.Append("\x1b[K\r\n");
             }
@@ -554,17 +695,67 @@ namespace WinDiskMap.Tui
             sb.Append(PadOrTruncate(text, width));
         }
 
-        private void AppendRowLine(StringBuilder sb, Row row, bool cursor, int width)
+        private static Columns MeasureColumns(int width)
         {
-            string meta;
-            if (row.Hint)
+            var c = new Columns { SizeW = 10, PctW = 7, DateW = 16 };
+            int withDates = 1 + c.SizeW + 1 + c.PctW + 2 * (1 + c.DateW);
+            int withPct = 1 + c.SizeW + 1 + c.PctW;
+            // Оставляем минимум места под имя/дерево; на узком терминале сначала
+            // пропадают даты, затем процент, размер остаётся всегда.
+            if (width >= 24 + withDates) { c.Percent = true; c.Dates = true; }
+            else if (width >= 20 + withPct) { c.Percent = true; }
+            return c;
+        }
+
+        private static void AppendColumnHeader(StringBuilder sb, int width, Columns c)
+        {
+            string left = " " + Loc.T("Путь", "Path");
+            sb.Append(ColorHeader);
+            sb.Append(left);
+
+            string meta = ColumnMeta(c);
+            int pad = width - 1 - left.Length - meta.Length;
+            if (pad < 1) pad = 1;
+            sb.Append(new string(' ', pad));
+            sb.Append(meta);
+        }
+
+        private static string ColumnMeta(Columns c)
+        {
+            var sb = new StringBuilder(64);
+            sb.Append(' ').Append(PadLeft(Loc.T("Размер", "Size"), c.SizeW));
+            if (c.Percent) sb.Append(' ').Append(PadLeft("%", c.PctW));
+            if (c.Dates)
             {
-                meta = "";
+                sb.Append(' ').Append(PadLeft(Loc.T("Создан", "Created on"), c.DateW));
+                sb.Append(' ').Append(PadLeft(Loc.T("Посл. запись", "Last write"), c.DateW));
             }
-            else
+            return sb.ToString();
+        }
+
+        private static string PadLeft(string text, int width)
+        {
+            if (text.Length > width) return text.Substring(text.Length - width);
+            return text.Length == width ? text : new string(' ', width - text.Length) + text;
+        }
+
+        private static string BuildMeta(Row row, Columns c, long rootSize)
+        {
+            var sb = new StringBuilder(64);
+            sb.Append(' ').Append(PadLeft(Format.Bytes(row.Size), c.SizeW));
+            if (c.Percent)
+                sb.Append(' ').Append(PadLeft(Format.Percent(row.Size, rootSize), c.PctW));
+            if (c.Dates)
             {
-                meta = "  " + Format.Bytes(row.Size) + " " + Format.Percent(row.Size, _root.Size);
+                sb.Append(' ').Append(PadLeft(Format.Time(row.CreatedUtc), c.DateW));
+                sb.Append(' ').Append(PadLeft(Format.Time(row.LastWriteUtc), c.DateW));
             }
+            return sb.ToString();
+        }
+
+        private void AppendRowLine(StringBuilder sb, Row row, bool cursor, int width, Columns c)
+        {
+            string meta = row.Hint ? "" : BuildMeta(row, c, _root.Size);
 
             string color = row.Hint ? ColorDim : ColorFor(row.Category);
 

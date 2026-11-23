@@ -33,5 +33,25 @@ namespace WinDiskMap.Core
             double p = part * 100.0 / whole;
             return p.ToString(p >= 10 ? "0.0" : "0.00", CultureInfo.InvariantCulture) + "%";
         }
+
+        /// <summary>
+        /// Дата из FILETIME (UTC) в местном времени. 0 или битой дате соответствует "-",
+        /// чтобы колонки не «прыгали» при скане через старого агента без дат.
+        /// </summary>
+        public static string Time(long filetimeUtc, bool brief = false)
+        {
+            if (filetimeUtc <= 0) return "-";
+            try
+            {
+                DateTime local = DateTime.FromFileTimeUtc(filetimeUtc).ToLocalTime();
+                if (local.Year < 1900 || local.Year > 2100) return "-";
+                return local.ToString(brief ? "MM-dd HH:mm" : "yyyy-MM-dd HH:mm",
+                                      CultureInfo.InvariantCulture);
+            }
+            catch
+            {
+                return "-";
+            }
+        }
     }
 }

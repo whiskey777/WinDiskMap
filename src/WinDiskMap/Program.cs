@@ -46,7 +46,7 @@ namespace WinDiskMap
 TUI (открывается сразу, дерево пополняется по мере сканирования):
   ↑↓ навигация   ← свернуть/к родителю   → развернуть   Enter переключить
   f фильтр (папки / папки+файлы / tmp / дампы)   s сортировка
-  e экспорт дерева в CSV   колесо мыши — прокрутка   q выход
+  e экспорт дерева в CSV   Del удалить (с подтверждением)   колесо мыши — прокрутка   q выход
 
 MFT-режим (прямое чтение $MFT, скорость WizTree) требует запуска от администратора
 и работает только с локального тома NTFS. Без админа, для сетевых (UNC) путей и
@@ -89,7 +89,7 @@ Examples:
 TUI (opens immediately, the tree fills in as the scan progresses):
   ↑↓ navigate   ← collapse/parent   → expand   Enter toggle
   f filter (folders / folders+files / tmp / dumps)   s sort
-  e export tree to CSV   mouse wheel — scroll   q quit
+  e export tree to CSV   Del delete (with confirmation)   mouse wheel — scroll   q quit
 
 MFT mode (direct $MFT read, WizTree-like speed) requires administrator rights and
 works only on a local NTFS volume. Without admin, for network (UNC) paths and

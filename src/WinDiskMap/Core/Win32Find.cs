@@ -11,6 +11,10 @@ namespace WinDiskMap.Core
         public bool IsDir;
         public bool IsReparse;
         public long Size;
+
+        /// <summary>FILETIME (UTC, 100 нс с 1601). 0 — неизвестно.</summary>
+        public long CreatedUtc;
+        public long LastWriteUtc;
     }
 
     /// <summary>
@@ -114,7 +118,10 @@ namespace WinDiskMap.Core
                         IsDir = isDir,
                         IsReparse = reparse,
                         // Размер файла — из записи каталога (для папок всегда 0).
-                        Size = ((long)data.nFileSizeHigh << 32) | data.nFileSizeLow
+                        Size = ((long)data.nFileSizeHigh << 32) | data.nFileSizeLow,
+                        // WIN32_FIND_DATA уже содержит обе даты — дополнительных сисколлов нет.
+                        CreatedUtc = ((long)data.ftCreationTimeHigh << 32) | data.ftCreationTimeLow,
+                        LastWriteUtc = ((long)data.ftLastWriteTimeHigh << 32) | data.ftLastWriteTimeLow
                     });
                 }
                 while (FindNextFileW(handle, out data));
@@ -127,6 +134,36 @@ namespace WinDiskMap.Core
             links = skipped;
             entries = list.Count == 0 ? Empty : list.ToArray();
             return true;
+        }
+
+        /// <summary>
+        /// Даты и атрибуты самого каталога (без wildcard FindFirstFile возвращает its own entry).
+        /// Используется для корня скана: остальные записи приходят из TryReadDirectory.
+        /// </summary>
+        public static bool TryGetPathEntry(string path, out Win32Entry entry)
+        {
+            entry = default(Win32Entry);
+            WIN32_FIND_DATA data;
+            IntPtr handle = FindFirstFileExW(path, FindExInfoBasic, out data,
+                FindExSearchNameMatch, IntPtr.Zero, 0);
+            if (handle == new IntPtr(InvalidHandleValue)) return false;
+            try
+            {
+                entry = new Win32Entry
+                {
+                    Name = data.cFileName,
+                    IsDir = (data.dwFileAttributes & FileAttributeDirectory) != 0,
+                    IsReparse = (data.dwFileAttributes & FileAttributeReparsePoint) != 0,
+                    Size = ((long)data.nFileSizeHigh << 32) | data.nFileSizeLow,
+                    CreatedUtc = ((long)data.ftCreationTimeHigh << 32) | data.ftCreationTimeLow,
+                    LastWriteUtc = ((long)data.ftLastWriteTimeHigh << 32) | data.ftLastWriteTimeLow
+                };
+                return true;
+            }
+            finally
+            {
+                FindClose(handle);
+            }
         }
 
         private static readonly Win32Entry[] Empty = new Win32Entry[0];

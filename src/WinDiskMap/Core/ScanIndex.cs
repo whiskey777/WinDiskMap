@@ -17,6 +17,8 @@ namespace WinDiskMap.Core
         public readonly List<string> Names = new List<string>(1 << 16);
         public readonly List<int> Parents = new List<int>(1 << 16);
         public readonly List<long> Sizes = new List<long>(1 << 16);   // только для файлов
+        public readonly List<long> CreatedUtc = new List<long>(1 << 16);    // FILETIME, 0 — неизвестно
+        public readonly List<long> LastWriteUtc = new List<long>(1 << 16);  // FILETIME, 0 — неизвестно
         public readonly List<bool> IsDir = new List<bool>(1 << 16);
         public readonly List<bool> IsReparse = new List<bool>(1 << 16);
 
@@ -28,12 +30,15 @@ namespace WinDiskMap.Core
 
         private Dictionary<int, List<int>> _children;
 
-        public int Add(string name, int parent, long size, bool isDir, bool isReparse)
+        public int Add(string name, int parent, long size, bool isDir, bool isReparse,
+            long createdUtc = 0, long lastWriteUtc = 0)
         {
             int i = Names.Count;
             Names.Add(name);
             Parents.Add(parent);
             Sizes.Add(size);
+            CreatedUtc.Add(createdUtc);
+            LastWriteUtc.Add(lastWriteUtc);
             IsDir.Add(isDir);
             IsReparse.Add(isReparse);
             // Reparse-папки (junction/symlink) в счётчик папок не входят — как у WizTree;
@@ -200,6 +205,9 @@ namespace WinDiskMap.Core
                 FullPath = displayPath.TrimEnd('\\'),
                 Depth = 0,
                 IsDir = true,
+                IsReparse = IsReparse[rootIndex],
+                CreatedUtc = CreatedUtc[rootIndex],
+                LastWriteUtc = LastWriteUtc[rootIndex],
                 Parent = null,
                 Expanded = true
             };
@@ -237,6 +245,8 @@ namespace WinDiskMap.Core
                         Depth = node.Depth + 1,
                         IsDir = true,
                         IsReparse = IsReparse[k],
+                        CreatedUtc = CreatedUtc[k],
+                        LastWriteUtc = LastWriteUtc[k],
                         Parent = node
                     };
                     node.Dirs.Add(child);

@@ -13,14 +13,14 @@ namespace WinDiskMap.Core
     /// </summary>
     public interface IWalkSink
     {
-        /// <summary>Корень обхода (создаётся до чтения каталогов). Возвращает идентификатор корня.</summary>
-        void Begin(string displayRoot);
+        /// <summary>Корень обхода (создаётся до чтения каталогов) с его датами.</summary>
+        void Begin(string displayRoot, long createdUtc = 0, long lastWriteUtc = 0);
 
-        /// <summary>Каталог: id, id родителя (-1 у корня), имя, reparse-признак.</summary>
-        void Dir(int id, int parent, string name, bool reparse);
+        /// <summary>Каталог: id, id родителя (-1 у корня), имя, reparse-признак и даты FILETIME (UTC).</summary>
+        void Dir(int id, int parent, string name, bool reparse, long createdUtc, long lastWriteUtc);
 
-        /// <summary>Файл: id, id родителя, имя, размер.</summary>
-        void File(int id, int parent, string name, long size);
+        /// <summary>Файл: id, id родителя, имя, размер и даты FILETIME (UTC).</summary>
+        void File(int id, int parent, string name, long size, long createdUtc, long lastWriteUtc);
 
         /// <summary>Обход завершён. skippedLinks — отброшенные junction/symlink-каталоги.</summary>
         void End(long skippedLinks);
@@ -67,7 +67,14 @@ namespace WinDiskMap.Core
             string displayRoot = (rootDisplay ?? "").TrimEnd('\\');
             if (displayRoot.Length == 0) displayRoot = rootDisplay;
 
-            sink.Begin(displayRoot);
+            Win32Entry rootEntry;
+            long rootCreated = 0, rootLastWrite = 0;
+            if (Win32Find.TryGetPathEntry(LongPath(displayRoot), out rootEntry))
+            {
+                rootCreated = rootEntry.CreatedUtc;
+                rootLastWrite = rootEntry.LastWriteUtc;
+            }
+            sink.Begin(displayRoot, rootCreated, rootLastWrite);
             prog.AddDir();
 
             long links = 0;
@@ -89,16 +96,21 @@ namespace WinDiskMap.Core
                 _tree = new TreeBuilder(session, prog);
             }
 
-            public void Begin(string displayRoot) { _tree.Begin(displayRoot); }
-
-            public void Dir(int id, int parent, string name, bool reparse)
+            public void Begin(string displayRoot, long createdUtc = 0, long lastWriteUtc = 0)
             {
-                _tree.Dir(id, parent, name, reparse);
+                _tree.Begin(displayRoot, false, createdUtc, lastWriteUtc);
             }
 
-            public void File(int id, int parent, string name, long size)
+            public void Dir(int id, int parent, string name, bool reparse,
+                long createdUtc, long lastWriteUtc)
             {
-                _tree.File(id, parent, name, size);
+                _tree.Dir(id, parent, name, reparse, createdUtc, lastWriteUtc);
+            }
+
+            public void File(int id, int parent, string name, long size,
+                long createdUtc, long lastWriteUtc)
+            {
+                _tree.File(id, parent, name, size, createdUtc, lastWriteUtc);
             }
 
             public void End(long skippedLinks) { }
@@ -256,14 +268,14 @@ namespace WinDiskMap.Core
                         if (e.IsDir)
                         {
                             int id = _nextId++;
-                            _sink.Dir(id, chunk.Id, e.Name, e.IsReparse);
+                            _sink.Dir(id, chunk.Id, e.Name, e.IsReparse, e.CreatedUtc, e.LastWriteUtc);
                             PutPath(id, full);
                             stack.Push(new Job { Id = id, Path = LongPath(full) });
                         }
                         else
                         {
                             int id = _nextId++;
-                            _sink.File(id, chunk.Id, e.Name, e.Size);
+                            _sink.File(id, chunk.Id, e.Name, e.Size, e.CreatedUtc, e.LastWriteUtc);
                         }
                     }
 

@@ -10,13 +10,19 @@ namespace WinDiskMap.Core
         public string FullPath;
         public long Size;
         public Category Category;
+
+        /// <summary>FILETIME (UTC). 0 — дата неизвестна (например, старый NDJSON-агент).</summary>
+        public long CreatedUtc;
+        public long LastWriteUtc;
     }
 
-    /// <summary>Файл «живого» сканера: имя+размер известны сразу при обходе каталога.</summary>
+    /// <summary>Файл «живого» сканера: имя+размер+даты известны сразу при обходе каталога.</summary>
     public sealed class LiveFile
     {
         public string Name;
         public long Size;
+        public long CreatedUtc;
+        public long LastWriteUtc;
     }
 
     /// <summary>
@@ -40,6 +46,10 @@ namespace WinDiskMap.Core
 
         /// <summary>Размер только файлов, лежащих непосредственно в этой папке.</summary>
         public long OwnSize;
+
+        /// <summary>Даты каталога в FILETIME (UTC). 0 — неизвестно.</summary>
+        public long CreatedUtc;
+        public long LastWriteUtc;
 
         public Node Parent;
         public List<Node> Dirs;
@@ -72,14 +82,51 @@ namespace WinDiskMap.Core
         /// обновляет кэш строк и прибавляет размер к цепочке предков, поэтому Tree.Size
         /// корректен на любом этапе сканирования (без пост-порядочной агрегации).
         /// </summary>
-        public void AddLiveFile(string name, long size)
+        public void AddLiveFile(string name, long size, long createdUtc = 0, long lastWriteUtc = 0)
         {
             if (LiveFiles == null) LiveFiles = new List<LiveFile>();
-            LiveFiles.Add(new LiveFile { Name = name, Size = size });
+            LiveFiles.Add(new LiveFile
+            {
+                Name = name,
+                Size = size,
+                CreatedUtc = createdUtc,
+                LastWriteUtc = lastWriteUtc
+            });
             _filesCache = null;
             OwnSize += size;
             for (Node p = this; p != null; p = p.Parent)
                 p.Size += size;
+        }
+
+        /// <summary>
+        /// Удаление файла из папки после реального удаления с диска. Размеры предков
+        /// caller'ом не трогаются — он вычитает одну и ту же величину по всей цепочке.
+        /// </summary>
+        public bool RemoveFileByName(string name, long size)
+        {
+            if (LiveFiles != null)
+            {
+                for (int i = 0; i < LiveFiles.Count; i++)
+                {
+                    if (!string.Equals(LiveFiles[i].Name, name, StringComparison.OrdinalIgnoreCase)) continue;
+                    LiveFiles.RemoveAt(i);
+                    _filesCache = null;
+                    OwnSize -= size;
+                    return true;
+                }
+                return false;
+            }
+
+            for (int i = 0; i < FileIndices.Count; i++)
+            {
+                int idx = FileIndices[i];
+                if (!string.Equals(_index.Names[idx], name, StringComparison.OrdinalIgnoreCase)) continue;
+                FileIndices.RemoveAt(i);
+                _filesCache = null;
+                OwnSize -= size;
+                return true;
+            }
+            return false;
         }
 
         /// <summary>Материализация файлов папки, отсортированных по убыванию размера. Кэшируется.</summary>
@@ -101,7 +148,9 @@ namespace WinDiskMap.Core
                         Name = f.Name,
                         FullPath = full,
                         Size = f.Size,
-                        Category = CategoryClassifier.ClassifyFile(f.Name, full)
+                        Category = CategoryClassifier.ClassifyFile(f.Name, full),
+                        CreatedUtc = f.CreatedUtc,
+                        LastWriteUtc = f.LastWriteUtc
                     });
                 }
             }
@@ -117,7 +166,9 @@ namespace WinDiskMap.Core
                         Name = name,
                         FullPath = full,
                         Size = _index.Sizes[idx],
-                        Category = CategoryClassifier.ClassifyFile(name, full)
+                        Category = CategoryClassifier.ClassifyFile(name, full),
+                        CreatedUtc = _index.CreatedUtc[idx],
+                        LastWriteUtc = _index.LastWriteUtc[idx]
                     });
                 }
             }

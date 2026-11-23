@@ -50,24 +50,30 @@ namespace WinDiskMap.Core.Remote
             Line();
         }
 
-        public void Dir(int id, int parent, string name, bool reparse)
+        public void Dir(int id, int parent, string name, bool reparse,
+            long createdUtc = 0, long lastWriteUtc = 0)
         {
             _sb.Length = 0;
             _sb.Append("{\"t\":\"dir\",\"id\":").Append(id)
                .Append(",\"parent\":").Append(parent)
                .Append(",\"reparse\":").Append(reparse ? "true" : "false")
+               .Append(",\"c\":").Append(createdUtc)
+               .Append(",\"w\":").Append(lastWriteUtc)
                .Append(",\"name\":");
             NdJson.WriteString(_sb, name);
             _sb.Append('}');
             Line();
         }
 
-        public void File(int id, int parent, string name, long size)
+        public void File(int id, int parent, string name, long size,
+            long createdUtc = 0, long lastWriteUtc = 0)
         {
             _sb.Length = 0;
             _sb.Append("{\"t\":\"file\",\"id\":").Append(id)
                .Append(",\"parent\":").Append(parent)
                .Append(",\"size\":").Append(size)
+               .Append(",\"c\":").Append(createdUtc)
+               .Append(",\"w\":").Append(lastWriteUtc)
                .Append(",\"name\":");
             NdJson.WriteString(_sb, name);
             _sb.Append('}');

@@ -106,7 +106,8 @@ namespace WinDiskMap.Core.Remote
             idx.BuildChildMap();
 
             long files = 0, dirs = 0, bytes = 0;
-            writer.Dir(0, -1, idx.Names[rootIndex], idx.IsReparse[rootIndex]);
+            writer.Dir(0, -1, idx.Names[rootIndex], idx.IsReparse[rootIndex],
+                       idx.CreatedUtc[rootIndex], idx.LastWriteUtc[rootIndex]);
             dirs++;
 
             var queue = new System.Collections.Generic.Queue<int[]>();
@@ -122,14 +123,16 @@ namespace WinDiskMap.Core.Remote
                     int k = kids[i];
                     if (idx.IsDir[k])
                     {
-                        writer.Dir(nextId, cur[1], idx.Names[k], idx.IsReparse[k]);
+                        writer.Dir(nextId, cur[1], idx.Names[k], idx.IsReparse[k],
+                                   idx.CreatedUtc[k], idx.LastWriteUtc[k]);
                         dirs++;
                         queue.Enqueue(new[] { k, nextId });
                         nextId++;
                     }
                     else
                     {
-                        writer.File(nextId, cur[1], idx.Names[k], idx.Sizes[k]);
+                        writer.File(nextId, cur[1], idx.Names[k], idx.Sizes[k],
+                                    idx.CreatedUtc[k], idx.LastWriteUtc[k]);
                         files++;
                         bytes += idx.Sizes[k];
                         nextId++;
@@ -166,20 +169,22 @@ namespace WinDiskMap.Core.Remote
                 _prog = prog;
             }
 
-            public void Begin(string displayRoot)
+            public void Begin(string displayRoot, long createdUtc = 0, long lastWriteUtc = 0)
             {
-                _writer.Dir(0, -1, displayRoot, false);
+                _writer.Dir(0, -1, displayRoot, false, createdUtc, lastWriteUtc);
             }
 
-            public void Dir(int id, int parent, string name, bool reparse)
+            public void Dir(int id, int parent, string name, bool reparse,
+                long createdUtc, long lastWriteUtc)
             {
-                _writer.Dir(id, parent, name, reparse);
+                _writer.Dir(id, parent, name, reparse, createdUtc, lastWriteUtc);
                 _prog.AddDir();
             }
 
-            public void File(int id, int parent, string name, long size)
+            public void File(int id, int parent, string name, long size,
+                long createdUtc, long lastWriteUtc)
             {
-                _writer.File(id, parent, name, size);
+                _writer.File(id, parent, name, size, createdUtc, lastWriteUtc);
                 _prog.AddFile(size);
             }
 
