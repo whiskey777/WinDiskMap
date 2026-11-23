@@ -2,7 +2,7 @@ using System;
 using System.Globalization;
 using System.Text;
 
-namespace DiskMap.Core.Remote
+namespace WinDiskMap.Core.Remote
 {
     /// <summary>
     /// Минимальный NDJSON: одна JSON-запись на строку, без зависимостей (работает и на

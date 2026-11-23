@@ -2,8 +2,8 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <AssemblyName>DiskMap</AssemblyName>
-    <RootNamespace>DiskMap</RootNamespace>
+    <AssemblyName>WinDiskMap</AssemblyName>
+    <RootNamespace>WinDiskMap</RootNamespace>
     <LangVersion>latest</LangVersion>
     <Nullable>disable</Nullable>
     <ImplicitUsings>disable</ImplicitUsings>

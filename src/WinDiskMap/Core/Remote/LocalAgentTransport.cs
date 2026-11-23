@@ -3,7 +3,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Text;
 
-namespace DiskMap.Core.Remote
+namespace WinDiskMap.Core.Remote
 {
     /// <summary>
     /// Транспорт «агент как локальный дочерний процесс». Не требует WinRM: запускает

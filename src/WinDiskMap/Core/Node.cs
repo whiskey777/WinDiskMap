@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace DiskMap.Core
+namespace WinDiskMap.Core
 {
     /// <summary>Строка файла, «материализованная» в строки списка при раскрытии папки.</summary>
     public sealed class FileRow

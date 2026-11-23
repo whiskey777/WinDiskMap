@@ -1,7 +1,7 @@
 using System;
 using System.Runtime.InteropServices;
 
-namespace DiskMap.Tui
+namespace WinDiskMap.Tui
 {
     /// <summary>Включение VT/ANSI-последовательностей в стандартной консоли Windows.</summary>
     internal static class Vt

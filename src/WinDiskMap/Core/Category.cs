@@ -1,7 +1,7 @@
 using System;
 using System.IO;
 
-namespace DiskMap.Core
+namespace WinDiskMap.Core
 {
     public enum Category
     {

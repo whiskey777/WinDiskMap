@@ -4,7 +4,7 @@ using System.IO;
 using System.Text;
 using System.Threading;
 
-namespace DiskMap.Core.Mft
+namespace WinDiskMap.Core.Mft
 {
     /// <summary>
     /// Прямое чтение $MFT с тома (то, что делает WizTree): boot-сектор → запись 0 ($MFT)

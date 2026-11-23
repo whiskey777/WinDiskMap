@@ -3,7 +3,7 @@ using System.IO;
 using System.Security.Principal;
 using System.Threading;
 
-namespace DiskMap.Core
+namespace WinDiskMap.Core
 {
     /// <summary>Прогресс сканирования, читаемый из UI-потока.</summary>
     public sealed class ScanProgress

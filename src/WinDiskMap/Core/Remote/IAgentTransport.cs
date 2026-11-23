@@ -1,6 +1,6 @@
 using System;
 
-namespace DiskMap.Core.Remote
+namespace WinDiskMap.Core.Remote
 {
     /// <summary>
     /// Транспорт запуска агента: получает строки NDJSON по мере поступления.

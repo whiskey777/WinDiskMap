@@ -1,7 +1,7 @@
 using System;
 using System.IO;
 
-namespace DiskMap.Core.Remote
+namespace WinDiskMap.Core.Remote
 {
     /// <summary>
     /// Хост-сторона удалённого скана. Пользователь задаёт путь ЛОКАЛЬНО на удалённом
@@ -199,21 +199,21 @@ namespace DiskMap.Core.Remote
             {
                 string proc = System.Diagnostics.Process.GetCurrentProcess().MainModule.FileName;
                 if (!string.IsNullOrEmpty(proc)
-                    && string.Equals(Path.GetFileName(proc), "DiskMap.exe",
+                    && string.Equals(Path.GetFileName(proc), "WinDiskMap.exe",
                                      StringComparison.OrdinalIgnoreCase)
                     && File.Exists(proc))
                     return proc;
             }
             catch { }
 
-            string candidate = Path.Combine(dir, "DiskMap.exe");
+            string candidate = Path.Combine(dir, "WinDiskMap.exe");
             if (File.Exists(candidate)) return candidate;
 
-            string net48 = Path.GetFullPath(Path.Combine(dir, "..", "..", "net48", "DiskMap.exe"));
+            string net48 = Path.GetFullPath(Path.Combine(dir, "..", "..", "net48", "WinDiskMap.exe"));
             if (File.Exists(net48)) return net48;
 
-            // Обычный запуск через `dotnet DiskMap.dll` — apphost может отсутствовать.
-            string dll = Path.Combine(dir, "DiskMap.dll");
+            // Обычный запуск через `dotnet WinDiskMap.dll` — apphost может отсутствовать.
+            string dll = Path.Combine(dir, "WinDiskMap.dll");
             return File.Exists(dll) ? dll : candidate;
         }
     }

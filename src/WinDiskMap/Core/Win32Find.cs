@@ -2,7 +2,7 @@ using System;
 using System.Runtime.InteropServices;
 using System.Text;
 
-namespace DiskMap.Core
+namespace WinDiskMap.Core
 {
     /// <summary>Одна запись каталога из WIN32_FIND_DATA (имя, атрибуты, размер).</summary>
     internal struct Win32Entry

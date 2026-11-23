@@ -3,20 +3,20 @@ using System.Diagnostics;
 using System.IO;
 using System.Text;
 using System.Threading;
-using DiskMap.Core;
-using DiskMap.Core.Mft;
-using DiskMap.Core.Remote;
-using DiskMap.Tui;
+using WinDiskMap.Core;
+using WinDiskMap.Core.Mft;
+using WinDiskMap.Core.Remote;
+using WinDiskMap.Tui;
 
-namespace DiskMap
+namespace WinDiskMap
 {
     internal static class Program
     {
         private static readonly string UsageRu =
-@"DiskMap — анализ занятого места на диске (аналог WizTree/TreeSize в консоли)
+@"WinDiskMap — анализ занятого места на диске (аналог WizTree/TreeSize в консоли)
 
 Использование:
-  DiskMap <путь> [опции]
+  WinDiskMap <путь> [опции]
 
 Опции:
   --csv <файл>       экспорт в CSV (без TUI)
@@ -36,12 +36,12 @@ namespace DiskMap
   --help             эта справка
 
 Примеры:
-  DiskMap C:\Users                     TUI по каталогу (дерево растёт по мере скана)
-  DiskMap C:\ --csv big.csv --depth 2  CSV: агрегаты папок первых двух уровней
-  DiskMap C:\ --headless --log m.log   скан без TUI + журнал для диагностики
-  DiskMap C:\ --csv d.csv --only dumps CSV: только дампы
-  DiskMap \\server\share --headless    сетевая шара: обход каталогов (MFT недоступен)
-  DiskMap --remote hostB --path C:\ --csv h.csv   удалённый скан C:\ на hostB (WinRM)
+  WinDiskMap C:\Users                     TUI по каталогу (дерево растёт по мере скана)
+  WinDiskMap C:\ --csv big.csv --depth 2  CSV: агрегаты папок первых двух уровней
+  WinDiskMap C:\ --headless --log m.log   скан без TUI + журнал для диагностики
+  WinDiskMap C:\ --csv d.csv --only dumps CSV: только дампы
+  WinDiskMap \\server\share --headless    сетевая шара: обход каталогов (MFT недоступен)
+  WinDiskMap --remote hostB --path C:\ --csv h.csv   удалённый скан C:\ на hostB (WinRM)
 
 TUI (открывается сразу, дерево пополняется по мере сканирования):
   ↑↓ навигация   ← свернуть/к родителю   → развернуть   Enter переключить
@@ -56,10 +56,10 @@ MFT-режим (прямое чтение $MFT, скорость WizTree) тре
 Коды выхода: 0 — ок, 1 — ошибка аргументов, 2 — ошибка сканирования, 3 — нет терминала.";
 
         private static readonly string UsageEn =
-@"DiskMap — console disk space analyzer (WizTree/TreeSize-like, no GUI)
+@"WinDiskMap — console disk space analyzer (WizTree/TreeSize-like, no GUI)
 
 Usage:
-  DiskMap <path> [options]
+  WinDiskMap <path> [options]
 
 Options:
   --csv <file>       export to CSV (no TUI)
@@ -79,12 +79,12 @@ Options:
   --help             this help
 
 Examples:
-  DiskMap C:\Users                     TUI for a directory (tree fills during scan)
-  DiskMap C:\ --csv big.csv --depth 2  CSV: folder aggregates, first two levels
-  DiskMap C:\ --headless --log m.log   scan without TUI + troubleshooting log
-  DiskMap C:\ --csv d.csv --only dumps CSV: dumps only
-  DiskMap \\server\share --headless    network share: directory walk (no MFT)
-  DiskMap --remote hostB --path C:\ --csv h.csv   remote scan of C:\ on hostB (WinRM)
+  WinDiskMap C:\Users                     TUI for a directory (tree fills during scan)
+  WinDiskMap C:\ --csv big.csv --depth 2  CSV: folder aggregates, first two levels
+  WinDiskMap C:\ --headless --log m.log   scan without TUI + troubleshooting log
+  WinDiskMap C:\ --csv d.csv --only dumps CSV: dumps only
+  WinDiskMap \\server\share --headless    network share: directory walk (no MFT)
+  WinDiskMap --remote hostB --path C:\ --csv h.csv   remote scan of C:\ on hostB (WinRM)
 
 TUI (opens immediately, the tree fills in as the scan progresses):
   ↑↓ navigate   ← collapse/parent   → expand   Enter toggle
@@ -259,7 +259,7 @@ Exit codes: 0 — ok, 1 — bad arguments, 2 — scan error, 3 — no terminal."
             if (logPath != null)
             {
                 AppLog.Init(logPath);
-                AppLog.Write("INFO", "DiskMap; args=" + string.Join(" ", args)
+                AppLog.Write("INFO", "WinDiskMap; args=" + string.Join(" ", args)
                                      + "; lang=" + (Loc.Ru ? "ru" : "en")
                                      + "; cwd=" + Directory.GetCurrentDirectory());
                 AppLog.Write("INFO", "admin=" + ScanRunner.IsAdministrator()
@@ -307,7 +307,7 @@ Exit codes: 0 — ok, 1 — bad arguments, 2 — scan error, 3 — no terminal."
                     session, remoteHost, remoteUser, remotePass, noMft))
                 {
                     IsBackground = true,
-                    Name = "DiskMap-remote"
+                    Name = "WinDiskMap-remote"
                 };
             }
             else if (agentLocal)
@@ -315,7 +315,7 @@ Exit codes: 0 — ok, 1 — bad arguments, 2 — scan error, 3 — no terminal."
                 scanThread = new Thread(() => RemoteScanRunner.RunLocalAgent(session, noMft))
                 {
                     IsBackground = true,
-                    Name = "DiskMap-agent-local"
+                    Name = "WinDiskMap-agent-local"
                 };
             }
             else
@@ -323,7 +323,7 @@ Exit codes: 0 — ok, 1 — bad arguments, 2 — scan error, 3 — no terminal."
                 scanThread = new Thread(() => ScanRunner.Run(session, noMft))
                 {
                     IsBackground = true,
-                    Name = "DiskMap-scan"
+                    Name = "WinDiskMap-scan"
                 };
             }
             scanThread.Start();
@@ -363,7 +363,7 @@ Exit codes: 0 — ok, 1 — bad arguments, 2 — scan error, 3 — no terminal."
             })
             {
                 IsBackground = true,
-                Name = "DiskMap-logger"
+                Name = "WinDiskMap-logger"
             };
             th.Start();
         }

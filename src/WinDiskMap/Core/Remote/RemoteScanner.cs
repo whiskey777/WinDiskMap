@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text;
 
-namespace DiskMap.Core.Remote
+namespace WinDiskMap.Core.Remote
 {
     /// <summary>
     /// Клиентская сторона удалённого скана: читает NDJSON-поток агента и строит

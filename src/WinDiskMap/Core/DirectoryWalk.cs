@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Threading;
 
-namespace DiskMap.Core
+namespace WinDiskMap.Core
 {
     /// <summary>
     /// Приёмник результатов обхода каталогов. Реализация решает, что делать с
@@ -156,7 +156,7 @@ namespace DiskMap.Core
 
                 for (int t = 0; t < workers; t++)
                 {
-                    threads[t] = new Thread(Worker) { IsBackground = true, Name = "DiskMap-read-" + t };
+                    threads[t] = new Thread(Worker) { IsBackground = true, Name = "WinDiskMap-read-" + t };
                     threads[t].Start();
                 }
 

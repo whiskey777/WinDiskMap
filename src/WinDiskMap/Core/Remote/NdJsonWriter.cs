@@ -2,7 +2,7 @@ using System;
 using System.IO;
 using System.Text;
 
-namespace DiskMap.Core.Remote
+namespace WinDiskMap.Core.Remote
 {
     /// <summary>
     /// Поток записей NDJSON в stdout агента. Каждая запись — отдельная строка,

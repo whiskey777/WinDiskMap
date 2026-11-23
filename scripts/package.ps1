@@ -8,8 +8,8 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $root      = Split-Path -Parent $PSScriptRoot
-$proj      = Join-Path $root 'src\DiskMap\DiskMap.csproj'
-$release48 = Join-Path $root 'src\DiskMap\bin\Release\net48'
+$proj      = Join-Path $root 'src\WinDiskMap\WinDiskMap.csproj'
+$release48 = Join-Path $root 'src\WinDiskMap\bin\Release\net48'
 $artifacts = Join-Path $root 'artifacts'
 New-Item -ItemType Directory -Force -Path $artifacts | Out-Null
 
@@ -19,7 +19,7 @@ function Write-Utf8Bom([string]$path, [string]$text) {
 
 function New-Readme([string]$path, [string]$exeName, [string]$variant) {
     $text = @"
-DiskMap $Version — portable ($variant)
+WinDiskMap $Version — portable ($variant)
 =====================================
 
 Запуск: распаковать в любую папку и запустить $exeName.
@@ -66,10 +66,10 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 $stage48 = Join-Path $artifacts 'portable-net48'
 if (Test-Path $stage48) { Remove-Item $stage48 -Recurse -Force }
 New-Item -ItemType Directory -Force -Path $stage48 | Out-Null
-Copy-Item (Join-Path $release48 'DiskMap.exe') $stage48 -Force
-Copy-Item (Join-Path $release48 'DiskMap.exe.config') $stage48 -Force
-New-Readme (Join-Path $stage48 'README.txt') 'DiskMap.exe' 'net48 (.NET Framework 4.8 встроен в Windows)'
-Complete-Package $stage48 (Join-Path $artifacts "DiskMap-portable-net48-v$Version.zip")
+Copy-Item (Join-Path $release48 'WinDiskMap.exe') $stage48 -Force
+Copy-Item (Join-Path $release48 'WinDiskMap.exe.config') $stage48 -Force
+New-Readme (Join-Path $stage48 'README.txt') 'WinDiskMap.exe' 'net48 (.NET Framework 4.8 встроен в Windows)'
+Complete-Package $stage48 (Join-Path $artifacts "WinDiskMap-portable-net48-v$Version.zip")
 
 # --- 2) net8 single-file: полностью автономный exe, без .NET Runtime на хосте ---
 if ($SelfContained) {
@@ -82,6 +82,6 @@ if ($SelfContained) {
         -o $stageSc
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-    New-Readme (Join-Path $stageSc 'README.txt') 'DiskMap.exe' 'net8.0 win-x64 self-contained (без .NET Runtime)'
-    Complete-Package $stageSc (Join-Path $artifacts "DiskMap-portable-win-x64-selfcontained-v$Version.zip")
+    New-Readme (Join-Path $stageSc 'README.txt') 'WinDiskMap.exe' 'net8.0 win-x64 self-contained (без .NET Runtime)'
+    Complete-Package $stageSc (Join-Path $artifacts "WinDiskMap-portable-win-x64-selfcontained-v$Version.zip")
 }

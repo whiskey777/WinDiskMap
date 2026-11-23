@@ -1,7 +1,7 @@
 using System;
 using System.Globalization;
 
-namespace DiskMap.Core
+namespace WinDiskMap.Core
 {
     internal static class Format
     {

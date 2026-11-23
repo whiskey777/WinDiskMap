@@ -5,7 +5,7 @@ using System.IO;
 using System.Text;
 using System.Threading;
 
-namespace DiskMap.Core.Remote
+namespace WinDiskMap.Core.Remote
 {
     /// <summary>
     /// Транспорт удалённого скана через PowerShell Remoting (WinRM/WSMan).
@@ -50,14 +50,14 @@ namespace DiskMap.Core.Remote
         public int StreamAgent(string remoteExeName, string remoteTarget, bool noMft,
             Action<string> onLine)
         {
-            string remoteOut = "DiskMap-agent-out-" + Guid.NewGuid().ToString("N") + ".ndjson";
+            string remoteOut = "WinDiskMap-agent-out-" + Guid.NewGuid().ToString("N") + ".ndjson";
             string ps = BuildScript(remoteExeName, remoteTarget, noMft, remoteOut);
             AppLog.Write("INFO", "remote ps-script:\n" + ps);
 
             // Скрипт — во временный .ps1 и запускаем через -File: длинная команда с
             // кавычками и юникодом не переживёт командную строку, а файл переживёт.
             string scriptPath = Path.Combine(Path.GetTempPath(),
-                "DiskMap-ps-" + Guid.NewGuid().ToString("N") + ".ps1");
+                "WinDiskMap-ps-" + Guid.NewGuid().ToString("N") + ".ps1");
             File.WriteAllText(scriptPath, ps, new UTF8Encoding(true));
 
             try
@@ -237,9 +237,9 @@ namespace DiskMap.Core.Remote
         private static string LocalExePath()
         {
             string cwd = Directory.GetCurrentDirectory();
-            string p1 = Path.GetFullPath(Path.Combine(cwd, "src", "DiskMap", "bin", "Release", "net48", "DiskMap.exe"));
+            string p1 = Path.GetFullPath(Path.Combine(cwd, "src", "WinDiskMap", "bin", "Release", "net48", "WinDiskMap.exe"));
             if (File.Exists(p1)) return p1;
-            string p2 = Path.GetFullPath(Path.Combine(cwd, "..", "src", "DiskMap", "bin", "Release", "net48", "DiskMap.exe"));
+            string p2 = Path.GetFullPath(Path.Combine(cwd, "..", "src", "WinDiskMap", "bin", "Release", "net48", "WinDiskMap.exe"));
             if (File.Exists(p2)) return p2;
             // fallback
             return RemoteScanRunner.LocalExeForAgent();
@@ -248,7 +248,7 @@ namespace DiskMap.Core.Remote
         public static string DefaultRemoteExePath()
         {
             // Имя файла агента в temp удалённого хоста ($env:TEMP раскрывается на месте).
-            return "DiskMap-agent.exe";
+            return "WinDiskMap-agent.exe";
         }
 
         /// <summary>Оболочка PowerShell: встроенный powershell.exe (есть на любой Windows).</summary>

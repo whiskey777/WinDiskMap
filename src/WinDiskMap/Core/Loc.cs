@@ -2,7 +2,7 @@ using System;
 using System.Globalization;
 using System.Runtime.InteropServices;
 
-namespace DiskMap.Core
+namespace WinDiskMap.Core
 {
     /// <summary>
     /// Локализация интерфейса. Русский выбирается ТОЛЬКО если язык интерфейса ОС русский

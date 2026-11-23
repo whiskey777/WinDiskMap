@@ -1,8 +1,8 @@
 using System;
 using System.IO;
-using DiskMap.Core.Mft;
+using WinDiskMap.Core.Mft;
 
-namespace DiskMap.Core.Remote
+namespace WinDiskMap.Core.Remote
 {
     /// <summary>
     /// Роль «агент»: запускается на удалённом хосте (или локально для отладки),
@@ -11,7 +11,7 @@ namespace DiskMap.Core.Remote
     ///
     /// Агент выбирает режим так же, как обычный запуск: MFT при админе и локальном
     /// NTFS (быстро и точно), иначе — обход каталогов. Точность та же, что у
-    /// локального DiskMap: NDJSON передаёт ровно те записи, что и обычный сканер.
+    /// локального WinDiskMap: NDJSON передаёт ровно те записи, что и обычный сканер.
     /// </summary>
     internal static class AgentRunner
     {

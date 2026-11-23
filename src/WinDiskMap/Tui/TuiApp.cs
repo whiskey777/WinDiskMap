@@ -3,9 +3,9 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using System.Threading;
-using DiskMap.Core;
+using WinDiskMap.Core;
 
-namespace DiskMap.Tui
+namespace WinDiskMap.Tui
 {
     internal enum SortMode { Size, Name }
     internal enum FilterMode { Folders, Files, Temp, Dumps }
@@ -321,7 +321,7 @@ namespace DiskMap.Tui
             }
 
             string path = Path.Combine(Directory.GetCurrentDirectory(),
-                "diskmap_export_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".csv");
+                "windiskmap_export_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".csv");
             try
             {
                 // Под локом: дерево может ещё дополняться сканером.
@@ -545,7 +545,7 @@ namespace DiskMap.Tui
                 ? Format.Number(_filesDone)
                 : Format.Number(_s.Progress.Files);
 
-            string text = " DiskMap │ " + _root.FullPath
+            string text = " WinDiskMap │ " + _root.FullPath
                 + " │ " + (done ? Loc.T("Итого", "Total") : Loc.T("Идёт сканирование", "Scanning"))
                 + ": " + Format.Bytes(_root.Size)
                 + " │ " + Loc.T("Файлов", "Files") + ": " + files
@@ -613,8 +613,8 @@ namespace DiskMap.Tui
             sb.Append(ColorHeader);
             sb.Append(PadOrTruncate(
                 _s.Error != null
-                    ? " DiskMap "
-                    : " DiskMap — " + Loc.T("Идёт сканирование", "Scanning") + " ",
+                    ? " WinDiskMap "
+                    : " WinDiskMap — " + Loc.T("Идёт сканирование", "Scanning") + " ",
                 width));
             sb.Append(ColorReset);
             sb.Append("\x1b[K\r\n\r\n");
@@ -723,7 +723,7 @@ namespace DiskMap.Tui
             sb.Append("\x1b[H");
             sb.Append(ColorHeader);
             sb.Append(PadOrTruncate(
-                " DiskMap — " + Loc.T("Идёт сканирование", "Scanning") + " ", width));
+                " WinDiskMap — " + Loc.T("Идёт сканирование", "Scanning") + " ", width));
             sb.Append(ColorReset);
             sb.Append("\x1b[K\r\n\r\n");
 

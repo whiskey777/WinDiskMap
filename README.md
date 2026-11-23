@@ -1,4 +1,4 @@
-# DiskMap
+# WinDiskMap
 
 Console disk space analyzer for Windows — a WizTree/TreeSize alternative without GUI.
 
@@ -34,20 +34,20 @@ Console disk space analyzer for Windows — a WizTree/TreeSize alternative witho
 ```powershell
 .\scripts\build.ps1
 # или:
-dotnet build src\DiskMap\DiskMap.csproj -c Release
+dotnet build src\WinDiskMap\WinDiskMap.csproj -c Release
 ```
 
 | Файл | Назначение |
 |---|---|
-| `src\DiskMap\bin\Release\net8.0\DiskMap.dll` | основной запуск: `dotnet DiskMap.dll ...` |
-| `src\DiskMap\bin\Release\net48\DiskMap.exe` | .NET Framework 4.8; его копирует WinRM-агент |
+| `src\WinDiskMap\bin\Release\net8.0\WinDiskMap.dll` | основной запуск: `dotnet WinDiskMap.dll ...` |
+| `src\WinDiskMap\bin\Release\net48\WinDiskMap.exe` | .NET Framework 4.8; его копирует WinRM-агент |
 
 Только Windows (P/Invoke `kernel32`/`user32`, MFT).
 
 ### Portable-пакеты
 
 ```powershell
-.\scripts\package.ps1                  # artifacts\DiskMap-portable-net48-v1.0.0.zip (~43 КБ)
+.\scripts\package.ps1                  # artifacts\WinDiskMap-portable-net48-v1.0.0.zip (~43 КБ)
 .\scripts\package.ps1 -SelfContained   # + автономный win-x64 ZIP (~30 МБ)
 ```
 
@@ -57,7 +57,7 @@ dotnet build src\DiskMap\DiskMap.csproj -c Release
 ## Использование
 
 ```
-DiskMap <путь> [опции]
+WinDiskMap <путь> [опции]
 
   --csv <файл>       экспорт в CSV (без TUI)
   --headless         без TUI: построчный прогресс и итоговый отчёт в stdout
@@ -79,12 +79,12 @@ DiskMap <путь> [опции]
 Примеры:
 
 ```powershell
-dotnet src\DiskMap\bin\Release\net8.0\DiskMap.dll C:\Users
-dotnet src\DiskMap\bin\Release\net8.0\DiskMap.dll C:\ --csv big.csv --depth 2
-dotnet src\DiskMap\bin\Release\net8.0\DiskMap.dll C:\ --headless --csv d.csv --only dumps --log m.log
-dotnet src\DiskMap\bin\Release\net8.0\DiskMap.dll \\server\share --headless
-dotnet src\DiskMap\bin\Release\net8.0\DiskMap.dll --remote hostB --path C:\Windows --csv remote.csv
-dotnet src\DiskMap\bin\Release\net8.0\DiskMap.dll --agent-local --path C:\Windows --csv a.csv
+dotnet src\WinDiskMap\bin\Release\net8.0\WinDiskMap.dll C:\Users
+dotnet src\WinDiskMap\bin\Release\net8.0\WinDiskMap.dll C:\ --csv big.csv --depth 2
+dotnet src\WinDiskMap\bin\Release\net8.0\WinDiskMap.dll C:\ --headless --csv d.csv --only dumps --log m.log
+dotnet src\WinDiskMap\bin\Release\net8.0\WinDiskMap.dll \\server\share --headless
+dotnet src\WinDiskMap\bin\Release\net8.0\WinDiskMap.dll --remote hostB --path C:\Windows --csv remote.csv
+dotnet src\WinDiskMap\bin\Release\net8.0\WinDiskMap.dll --agent-local --path C:\Windows --csv a.csv
 ```
 
 Коды выхода: `0` — ок, `1` — ошибка аргументов, `2` — ошибка сканирования, `3` — нет терминала.
@@ -151,7 +151,7 @@ Set-Item WSMan:\localhost\Client\TrustedHosts -Value 'hostB' -Force
 ## Структура
 
 ```
-src/DiskMap/     исходники (net8.0 + net48)
+src/WinDiskMap/     исходники (net8.0 + net48)
   Core/          скан, MFT, обход, CSV, дерево
   Core/Remote/   агент, NDJSON, транспорты, хост удалённого скана
   Tui/           терминальный интерфейс

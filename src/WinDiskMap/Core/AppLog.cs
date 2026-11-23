@@ -2,7 +2,7 @@ using System;
 using System.IO;
 using System.Text;
 
-namespace DiskMap.Core
+namespace WinDiskMap.Core
 {
     /// <summary>
     /// Опциональный журнал с таймстемпами для диагностики (--log). Потокобезопасен.

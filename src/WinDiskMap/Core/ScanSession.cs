@@ -1,4 +1,4 @@
-namespace DiskMap.Core
+namespace WinDiskMap.Core
 {
     /// <summary>
     /// Совместное состояние сканирования и TUI. Root строится либо сразу (живой обход

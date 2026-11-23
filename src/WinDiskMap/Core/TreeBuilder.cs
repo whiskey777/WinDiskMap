@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 
-namespace DiskMap.Core
+namespace WinDiskMap.Core
 {
     /// <summary>
     /// Построение живого дерева Node из потока записей (dir/file) по id-ссылкам.
