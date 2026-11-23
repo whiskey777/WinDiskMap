@@ -91,6 +91,7 @@ namespace WinDiskMap.Tui
                     // Ввод опрашивается и после завершения скана: блокирующий ReadKey
                     // «замораживал» бы экран при ресайзе окна.
                     bool hadInput = false;
+                    bool wasDone = _s.Done;
                     try
                     {
                         if (Console.KeyAvailable)
@@ -120,8 +121,10 @@ namespace WinDiskMap.Tui
                     }
 
                     // Пока идёт скан — рисуем каждый проход (живой прогресс); после —
-                    // только по действию пользователя или изменению размера окна.
-                    if (resized || hadInput || !_s.Done)
+                    // только по действию пользователя, изменению размера или в момент
+                    // завершения (иначе "<Пусто>" появится лишь после следующей клавиши).
+                    bool justDone = !wasDone && _s.Done;
+                    if (resized || hadInput || !_s.Done || justDone)
                     {
                         RebuildRows();
                         Render();
