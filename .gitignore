@@ -21,12 +21,9 @@ desktop.ini
 *.csv
 *.log
 *.ndjson
-logs/*
-artifacts/*
-backups/*
-!logs/.gitkeep
-!artifacts/.gitkeep
-!backups/.gitkeep
+logs/
+artifacts/
+backups/
 
 # Temp
 *.tmp
