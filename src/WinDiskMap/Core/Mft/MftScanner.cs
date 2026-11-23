@@ -184,8 +184,9 @@ namespace WinDiskMap.Core.Mft
             bool reparse = false;
             long fnSize = 0;
             bool haveFnSize = false;
-            // Даты: $STANDARD_INFORMATION приоритетнее (то, что показывает Проводник),
-            // $FILE_NAME — фолбэк для повреждённых/устаревших SI. FILETIME в UTC.
+            // Даты: $FILE_NAME приоритетнее — именно его читает WizTree в MFT-режиме
+            // (и именно его показывает Проводник при листинге каталога). $STANDARD_INFORMATION
+            // служит фолбэком для записей без FN. FILETIME в UTC.
             long siCreated = 0, siLastWrite = 0;
             long fnCreated = 0, fnLastWrite = 0;
 
@@ -286,8 +287,11 @@ namespace WinDiskMap.Core.Mft
                 gotSize = true;
             }
 
-            long createdUtc = siCreated != 0 ? siCreated : fnCreated;
-            long lastWriteUtc = siLastWrite != 0 ? siLastWrite : fnLastWrite;
+            // WizTree берёт даты из $FILE_NAME ($MFT), а не из $STANDARD_INFORMATION.
+            // Разница может быть месяцами: SI обновляется при записи файла, FN — при
+            // операциях с именем/каталогом. Для совпадения экспорта приоритет у FN.
+            long createdUtc = fnCreated != 0 ? fnCreated : siCreated;
+            long lastWriteUtc = fnLastWrite != 0 ? fnLastWrite : siLastWrite;
 
             if (isExtension)
             {
@@ -896,8 +900,8 @@ namespace WinDiskMap.Core.Mft
                     while (last + 1 < _recNos.Count && _recNos[last + 1] == recNo) last++;
                     for (int k = first; k <= last; k++) rows.Add(k);
 
-                    // SI базовой записи приоритетнее; расширение подставляет даты,
-                    // если в базе они повреждены/отсутствуют (все hardlink-строки сразу).
+                    // Даты базовой записи (FN, фолбэк SI) приоритетнее; расширение
+                    // подставляет даты, если в базе они повреждены/отсутствуют.
                     if (e.CreatedUtc != 0 || e.LastWriteUtc != 0)
                         for (int r = 0; r < rows.Count; r++)
                         {

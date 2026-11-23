@@ -113,7 +113,9 @@ namespace WinDiskMap.Core
         }
 
         /// <summary>Рекурсивные счётчики файлов/папок для колонок WizTree «Файлы»/«Папки».
-        /// Reparse-папки не учитываются — так же, как в счётчиках сканера и у WizTree.</summary>
+        /// Каждый узел считает и себя; при записи строки вычитаем 1 (WizTree считает
+        /// только потомков, не саму строку-папку). Reparse-папки не учитываются —
+        /// так же, как в счётчиках сканера и у WizTree.</summary>
         private static void FillSubtreeCounts(Node node)
         {
             long files = node.FileCount;
@@ -208,12 +210,15 @@ namespace WinDiskMap.Core
             writer.Write(',');
             WriteField(writer, Format.CsvTime(dir.LastWriteUtc));
             writer.Write(',');
-            // WizTree не показывает бит FILE_ATTRIBUTE_DIRECTORY в колонке «Атрибуты».
-            writer.Write(dir.Attributes & ~0x10u);
+            // WizTree показывает бит DIRECTORY (0x10) для папок; у корня экспорта — 0.
+            // NTFS $FILE_NAME хранит DIRECTORY как 0x10000000 — нормализуем в 0x10.
+            writer.Write(DirAttributes(dir));
             writer.Write(',');
             writer.Write(dir.SubtreeFiles);
             writer.Write(',');
-            writer.Write(dir.SubtreeDirs);
+            // SubtreeDirs включает саму строку; WizTree показывает только потомков.
+            // Reparse-папки в счётчике не участвуют — для них уже стоит 0.
+            writer.Write(dir.IsReparse ? 0 : Math.Max(0, dir.SubtreeDirs - 1));
 
             // — наши поля —
             writer.Write(',');
@@ -231,6 +236,15 @@ namespace WinDiskMap.Core
 
             WriteVolume(writer, dir.Parent == null ? vol : default(VolumeInfo));
             writer.WriteLine();
+        }
+
+        /// <summary>Атрибуты папки в колонке WizTree «Атрибуты».</summary>
+        private static uint DirAttributes(Node dir)
+        {
+            if (dir.Parent == null) return 0; // у корня экспорта WizTree ставит 0
+            uint a = dir.Attributes;
+            if ((a & 0x10000000u) != 0) a = (a & ~0x10000000u) | 0x10u;
+            return a | 0x10u;
         }
 
         private static void WriteVolume(StreamWriter writer, VolumeInfo vol)

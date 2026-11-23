@@ -59,7 +59,7 @@ namespace WinDiskMap.Core
         /// <summary>«На диске» только файлы непосредственно в этой папке.</summary>
         public long OwnAllocated;
 
-        /// <summary>FILE_ATTRIBUTE_* у каталога (у MFT-пути — из $STANDARD_INFORMATION).</summary>
+        /// <summary>FILE_ATTRIBUTE_* у каталога (у MFT-пути — из $STANDARD_INFORMATION/$FILE_NAME).</summary>
         public uint Attributes;
 
         /// <summary>Счётчики поддерева для CSV (FillSubtreeCounts вызывается перед экспортом).</summary>

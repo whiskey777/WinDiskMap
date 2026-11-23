@@ -35,3 +35,4 @@ backups/
 /verification/
 /scripts/compare-csv.ps1
 /scripts/verify-against-wiztree.ps1
+/scripts/verify-csv-full.ps1
