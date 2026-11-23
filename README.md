@@ -64,6 +64,22 @@ dotnet build src\DiskMap\DiskMap.csproj -c Release
 Целевая платформа — Windows (P/Invoke `kernel32`/`user32`, MFT). Сборка чистая:
 0 предупреждений, 0 ошибок.
 
+## Portable-пакеты (без установки)
+
+```powershell
+.\scripts\package.ps1                  # artifacts\DiskMap-portable-net48-v1.0.0.zip (~43 КБ)
+.\scripts\package.ps1 -SelfContained   # + artifacts\DiskMap-portable-win-x64-selfcontained-v1.0.0.zip (~30 МБ)
+```
+
+- **net48** — один `DiskMap.exe` + `.config`, работает на Windows 10/11/Server, где
+  .NET Framework 4.8 встроен в ОС.
+- **self-contained win-x64** — один `DiskMap.exe` со встроенным .NET 8, не требует
+  установленного рантайма. В обоих архивах есть `README.txt`, `LICENSE.txt`, `SHA256SUMS.txt`.
+- Оба варианта распаковываются в любую папку, ничего не пишут в реестр; `--help` и
+  `--agent-local` проверены на обоих. Артефакты лежат в `artifacts/` и **не коммитятся**.
+- EXE не подписан — в корпоративной среде возможны предупреждения SmartScreen/EDR
+  (подробнее в [STATUS.md](STATUS.md)).
+
 ## Использование
 
 ```

@@ -46,6 +46,11 @@
 - Проверено локально: `--agent-local` по `C:\Windows` → **197 558 папок / 226 958 файлов /
   52.3 ГБ**, CSV байт-в-байт совпадает с WizTree (missing 0, extra 0, size mismatches 0,
   TOTAL delta 0). Сборка Release — чистая.
+- 2026-11-23 добавлен `scripts/package.ps1`: portable ZIP `net48` (~43 КБ) и
+  `win-x64 self-contained` (~30 МБ) в `artifacts/`. Исправлен поиск агента в
+  `RemoteScanRunner.LocalExeForAgent()` — вместо `Assembly.Location` (пустой и давал
+  IL3000 в single-file) используется путь текущего процесса; `--help` и `--agent-local`
+  проверены на обоих portable-вариантах. Артефакты в git не коммитятся.
 
 ## Проверки (21.10.2026, перенесены в verification/)
 
@@ -75,6 +80,10 @@
 3. **Документация приведена в соответствие с Фазой 2** (этот файл, README, docs/) —
    исходный `README.md` в `Default Project` остался прежним (только Фаза 1 + планы).
    Если проект продолжится здесь, считать канонической эту папку.
+4. **Корпоративная безопасность заказчика**: portable EXE не подписан, а прямое чтение
+   `$MFT` и WinRM-агент с `-ExecutionPolicy Bypass` могут дать срабатывания EDR/SmartScreen.
+   Для пилота: `--no-mft`, локальный запуск без WinRM, согласование SHA256 из
+   `SHA256SUMS.txt`; для прода — кодовая подпись и исключения в EDR.
 
 ## Как продолжить
 

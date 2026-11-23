@@ -193,13 +193,18 @@ namespace DiskMap.Core.Remote
         {
             string dir = AppDomain.CurrentDomain.BaseDirectory;
 
-            if (Path.GetFileName(System.Reflection.Assembly.GetEntryAssembly() != null
-                    ? System.Reflection.Assembly.GetEntryAssembly().Location
-                    : "").EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+            // net48-exe, net8-apphost и single-file: агент — сам процесс.
+            // Assembly.Location здесь нельзя использовать: в single-file он пустой (IL3000).
+            try
             {
-                // Уже net48-exe: агент — сам себя.
-                return System.Reflection.Assembly.GetEntryAssembly().Location;
+                string proc = System.Diagnostics.Process.GetCurrentProcess().MainModule.FileName;
+                if (!string.IsNullOrEmpty(proc)
+                    && string.Equals(Path.GetFileName(proc), "DiskMap.exe",
+                                     StringComparison.OrdinalIgnoreCase)
+                    && File.Exists(proc))
+                    return proc;
             }
+            catch { }
 
             string candidate = Path.Combine(dir, "DiskMap.exe");
             if (File.Exists(candidate)) return candidate;
@@ -207,10 +212,9 @@ namespace DiskMap.Core.Remote
             string net48 = Path.GetFullPath(Path.Combine(dir, "..", "..", "net48", "DiskMap.exe"));
             if (File.Exists(net48)) return net48;
 
-            string dll = System.Reflection.Assembly.GetEntryAssembly() != null
-                ? System.Reflection.Assembly.GetEntryAssembly().Location
-                : candidate;
-            return dll;
+            // Обычный запуск через `dotnet DiskMap.dll` — apphost может отсутствовать.
+            string dll = Path.Combine(dir, "DiskMap.dll");
+            return File.Exists(dll) ? dll : candidate;
         }
     }
 }
