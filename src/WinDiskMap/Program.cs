@@ -43,10 +43,11 @@ namespace WinDiskMap
   WinDiskMap \\server\share --headless    сетевая шара: обход каталогов (MFT недоступен)
   WinDiskMap --remote hostB --path C:\ --csv h.csv   удалённый скан C:\ на hostB (WinRM)
 
-CSV — единый формат «WizTree +»: первые 7 колонок (Имя файла;Размер;На диске;Изменено;
-Атрибуты;Файлы;Папки) совпадают с экспортом WizTree по имени и смыслу, затем идут
-Глубина;Родитель;Имя;Категория;РазмерЧеловеческий;Доля и колонки тома в строке корня.
-Разделитель «;», UTF-8 с BOM.
+CSV — единый формат «WizTree +»: первые 7 колонок (File name,Size,On disk,Modified,
+Attributes,Files,Folders) совпадают с экспортом WizTree по имени и смыслу, затем идут
+Depth,Parent,Name,Category,SizeHuman,Percent и колонки тома в строке корня.
+Разделитель «,», UTF-8 с BOM. Заголовки и значения всегда английские — формат не зависит
+от --lang и локали ОС (строки-баннера перед заголовком нет).
 
 TUI (открывается сразу, дерево пополняется по мере сканирования):
   ↑↓ навигация   ← свернуть/к родителю   → развернуть   Enter открыть файл/переключить папку
@@ -92,10 +93,11 @@ Examples:
   WinDiskMap \\server\share --headless    network share: directory walk (no MFT)
   WinDiskMap --remote hostB --path C:\ --csv h.csv   remote scan of C:\ on hostB (WinRM)
 
-CSV — single ""WizTree +"" format: the first 7 columns (File name;Size;On disk;Modified;
-Attributes;Files;Folders) match WizTree export in name and meaning, followed by
-Depth;Parent;Name;Category;SizeHuman;Percent and volume columns in the root row.
-Separator "";"", UTF-8 with BOM.
+CSV — single ""WizTree +"" format: the first 7 columns (File name,Size,On disk,Modified,
+Attributes,Files,Folders) match WizTree export in name and meaning, followed by
+Depth,Parent,Name,Category,SizeHuman,Percent and volume columns in the root row.
+Delimiter: comma, UTF-8 with BOM. Headers and values are ALWAYS English — the format
+does not depend on --lang or the OS locale (no banner line before the header).
 
 TUI (opens immediately, the tree fills in as the scan progresses):
   ↑↓ navigate   ← collapse/parent   → expand   Enter open file/toggle folder

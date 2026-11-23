@@ -30,23 +30,22 @@ namespace WinDiskMap.Core
     /// <summary>
     /// Экспорт в едином «combined» формате: поля WizTree в их родном порядке первыми,
     /// затем наши поля (иерархия, категория, human-readable размер, доля).
-    /// UTF-8 с BOM, разделитель «;» (корректно открывается в Excel с русской локалью).
+    /// UTF-8 с BOM, разделитель «,» (стандартный CSV; Import-Csv в PowerShell работает
+    /// без параметров). Заголовки и значения ВСЕГДА английские, независимо от --lang:
+    /// формат файла не должен зависеть от локали ОС, иначе ломается разбор PowerShell-объектов.
     /// Первые семь колонок совпадают с WizTree по имени и смыслу:
-    ///   Имя файла;Размер;На диске;Изменено;Атрибуты;Файлы;Папки
+    ///   File name,Size,On disk,Modified,Attributes,Files,Folders
     /// Четыре колонки тома (DRIVECAPACITY …, в строке корня у WizTree) вынесены в конец
     /// и заполняются только в строке корня — так позиции наших колонок не «прыгают».
+    /// Строки-баннера перед заголовком нет (в отличие от экспорта WizTree).
     /// Потоковая запись: миллионы строк не держатся в памяти.
     /// </summary>
     public static class CsvExporter
     {
-        private const string HeaderRu =
-            "Имя файла;Размер;На диске;Изменено;Атрибуты;Файлы;Папки;" +
-            "Глубина;Родитель;Имя;Категория;РазмерЧеловеческий;Доля;" +
-            "DRIVECAPACITY;FREESPACE;USEDSPACE;RESERVEDSPACE";
-        private const string HeaderEn =
-            "File name;Size;On disk;Modified;Attributes;Files;Folders;" +
-            "Depth;Parent;Name;Category;SizeHuman;Percent;" +
-            "DRIVECAPACITY;FREESPACE;USEDSPACE;RESERVEDSPACE";
+        private const string Header =
+            "File name,Size,On disk,Modified,Attributes,Files,Folders," +
+            "Depth,Parent,Name,Category,SizeHuman,Percent," +
+            "DRIVECAPACITY,FREESPACE,USEDSPACE,RESERVEDSPACE";
 
         private struct VolumeInfo
         {
@@ -68,7 +67,7 @@ namespace WinDiskMap.Core
 
             using (var writer = new StreamWriter(options.OutputPath, false, new UTF8Encoding(true)))
             {
-                writer.WriteLine(Loc.T(HeaderRu, HeaderEn));
+                writer.WriteLine(Header);
 
                 var stack = new Stack<Node>();
                 stack.Push(root);
@@ -164,31 +163,31 @@ namespace WinDiskMap.Core
 
                 // — поля WizTree —
                 WriteQuoted(writer, f.FullPath, true);
-                writer.Write(';');
+                writer.Write(',');
                 writer.Write(f.Size);
-                writer.Write(';');
+                writer.Write(',');
                 writer.Write(f.Allocated > 0 ? f.Allocated : f.Size);
-                writer.Write(';');
+                writer.Write(',');
                 WriteField(writer, Format.CsvTime(f.LastWriteUtc));
-                writer.Write(';');
+                writer.Write(',');
                 writer.Write(f.Attributes);
-                writer.Write(';');
+                writer.Write(',');
                 writer.Write('0'); // Файлы
-                writer.Write(';');
+                writer.Write(',');
                 writer.Write('0'); // Папки
 
                 // — наши поля —
-                writer.Write(';');
+                writer.Write(',');
                 writer.Write(dir.Depth + 1);
-                writer.Write(';');
+                writer.Write(',');
                 WriteQuoted(writer, dir.FullPath, true);
-                writer.Write(';');
+                writer.Write(',');
                 WriteQuoted(writer, f.Name, true);
-                writer.Write(';');
+                writer.Write(',');
                 writer.Write(CategoryName(f.Category));
-                writer.Write(';');
+                writer.Write(',');
                 writer.Write(Format.Bytes(f.Size));
-                writer.Write(';');
+                writer.Write(',');
                 writer.Write(Format.Percent(f.Size, total));
 
                 WriteVolume(writer, default(VolumeInfo));
@@ -202,32 +201,32 @@ namespace WinDiskMap.Core
         {
             // — поля WizTree —
             WriteQuoted(writer, WithTrailingSlash(dir.FullPath), true);
-            writer.Write(';');
+            writer.Write(',');
             writer.Write(dir.Size);
-            writer.Write(';');
+            writer.Write(',');
             writer.Write(dir.Allocated);
-            writer.Write(';');
+            writer.Write(',');
             WriteField(writer, Format.CsvTime(dir.LastWriteUtc));
-            writer.Write(';');
+            writer.Write(',');
             // WizTree не показывает бит FILE_ATTRIBUTE_DIRECTORY в колонке «Атрибуты».
             writer.Write(dir.Attributes & ~0x10u);
-            writer.Write(';');
+            writer.Write(',');
             writer.Write(dir.SubtreeFiles);
-            writer.Write(';');
+            writer.Write(',');
             writer.Write(dir.SubtreeDirs);
 
             // — наши поля —
-            writer.Write(';');
+            writer.Write(',');
             writer.Write(dir.Depth);
-            writer.Write(';');
+            writer.Write(',');
             WriteQuoted(writer, dir.Parent != null ? dir.Parent.FullPath : "", true);
-            writer.Write(';');
+            writer.Write(',');
             WriteQuoted(writer, dir.Name, true);
-            writer.Write(';');
+            writer.Write(',');
             writer.Write(CategoryName(Category.Folder));
-            writer.Write(';');
+            writer.Write(',');
             writer.Write(Format.Bytes(dir.Size));
-            writer.Write(';');
+            writer.Write(',');
             writer.Write(Format.Percent(dir.Size, total));
 
             WriteVolume(writer, dir.Parent == null ? vol : default(VolumeInfo));
@@ -238,16 +237,16 @@ namespace WinDiskMap.Core
         {
             if (!vol.Ok)
             {
-                writer.Write(";;;;");
+                writer.Write(",,,,");
                 return;
             }
-            writer.Write(';');
+            writer.Write(',');
             writer.Write(vol.Capacity);
-            writer.Write(';');
+            writer.Write(',');
             writer.Write(vol.Free);
-            writer.Write(';');
+            writer.Write(',');
             writer.Write(vol.Used);
-            writer.Write(';');
+            writer.Write(',');
             writer.Write(vol.Reserved);
         }
 
@@ -263,8 +262,8 @@ namespace WinDiskMap.Core
             {
                 case Category.Temp: return "Temp";
                 case Category.Dump: return "Dump";
-                case Category.Folder: return Loc.T("Папка", "Folder");
-                default: return Loc.T("Файл", "File");
+                case Category.Folder: return "Folder";
+                default: return "File";
             }
         }
 
@@ -272,7 +271,7 @@ namespace WinDiskMap.Core
         private static void WriteField(StreamWriter writer, string value)
         {
             if (string.IsNullOrEmpty(value)) return;
-            if (value.IndexOf(';') >= 0 || value.IndexOf('"') >= 0 || value.IndexOf('\n') >= 0)
+            if (value.IndexOf(',') >= 0 || value.IndexOf('"') >= 0 || value.IndexOf('\n') >= 0)
             {
                 writer.Write('"');
                 writer.Write(value.Replace("\"", "\"\""));
@@ -288,7 +287,7 @@ namespace WinDiskMap.Core
         private static void WriteQuoted(StreamWriter writer, string value, bool always)
         {
             if (value == null) value = "";
-            if (always || value.IndexOf(';') >= 0 || value.IndexOf('"') >= 0 || value.IndexOf('\n') >= 0)
+            if (always || value.IndexOf(',') >= 0 || value.IndexOf('"') >= 0 || value.IndexOf('\n') >= 0)
             {
                 writer.Write('"');
                 writer.Write(value.Replace("\"", "\"\""));

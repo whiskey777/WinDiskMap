@@ -24,7 +24,8 @@ Console disk space analyzer for Windows — a WizTree/TreeSize alternative witho
 - **Цвета**: папки — голубой, файлы — белый, tmp/temp — жёлтый, дампы — пурпурный.
 - **Мышь (SGR)**: колесо — прокрутка, левый клик — курсор + раскрыть/свернуть папку.
 - **Два языка**: ru при русском языке интерфейса ОС, иначе en; переопределение `--lang ru|en`.
-- **CSV**: UTF-8 с BOM (Excel), разделитель `;`, потоковая запись, `--depth`,
+- **CSV**: UTF-8 с BOM, разделитель `,` (стандартный CSV, `Import-Csv` без параметров),
+  заголовки и значения всегда английские, потоковая запись, `--depth`,
   `--only dirs|files|tmp|dumps`, `--details`.
 - **Вывод**: TUI (по умолчанию), `--headless` (прогресс и отчёт в stdout),
   `--log <файл>` (журнал с таймстемпами). Комбинируются.
@@ -123,16 +124,18 @@ dotnet src\WinDiskMap\bin\Release\net8.0\WinDiskMap.dll --agent-local --path C:\
 и смыслу, затем идут наши поля, а в строке корня — параметры тома:
 
 ```
-Имя файла;Размер;На диске;Изменено;Атрибуты;Файлы;Папки;
-Глубина;Родитель;Имя;Категория;РазмерЧеловеческий;Доля;
-DRIVECAPACITY;FREESPACE;USEDSPACE;RESERVEDSPACE
+File name,Size,On disk,Modified,Attributes,Files,Folders,
+Depth,Parent,Name,Category,SizeHuman,Percent,
+DRIVECAPACITY,FREESPACE,USEDSPACE,RESERVEDSPACE
 ```
 
-- `Размер` — логический размер (как у WizTree), `На диске` — реально занятые кластеры
+- `Size` — логический размер (как у WizTree), `On disk` — реально занятые кластеры
   (в MFT-режиме из `$DATA`, при обходе каталогов из `FILE_STANDARD_INFO.AllocationSize`).
   Даты — локальное время в формате `yyyy.MM.dd HH:mm:ss`, как в экспорте WizTree.
-- Разделитель `;`, UTF-8 с BOM (открывается в Excel без настроек импорта).
-- На en-ОС — английские заголовки и значения `Folder`/`File`.
+- Разделитель `,`, UTF-8 с BOM. `Import-Csv` работает без параметров:
+  `Import-Csv report.csv | Where-Object Size -gt 1GB`.
+- Заголовки и значения (`Folder`/`File`/`Temp`/`Dump`) **всегда английские** и не зависят
+  от `--lang` или локали ОС. Строки-баннера перед заголовком нет (в отличие от WizTree).
 - `--only dirs` (по умолчанию) — агрегаты папок; с `--details` — плюс каждый файл.
 - `--only files|tmp|dumps` — только файлные строки.
 - `--depth N` — строки глубже N не пишутся (файл в папке уровня N — строка глубины N+1).
