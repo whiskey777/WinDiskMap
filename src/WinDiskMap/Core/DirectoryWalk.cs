@@ -14,13 +14,16 @@ namespace WinDiskMap.Core
     public interface IWalkSink
     {
         /// <summary>Корень обхода (создаётся до чтения каталогов) с его датами.</summary>
-        void Begin(string displayRoot, long createdUtc = 0, long lastWriteUtc = 0);
+        void Begin(string displayRoot, long createdUtc = 0, long lastWriteUtc = 0,
+            long allocated = 0, uint attributes = 0);
 
-        /// <summary>Каталог: id, id родителя (-1 у корня), имя, reparse-признак и даты FILETIME (UTC).</summary>
-        void Dir(int id, int parent, string name, bool reparse, long createdUtc, long lastWriteUtc);
+        /// <summary>Каталог: id, id родителя (-1 у корня), имя, reparse-признак, даты FILETIME (UTC), «На диске» и атрибуты.</summary>
+        void Dir(int id, int parent, string name, bool reparse, long createdUtc, long lastWriteUtc,
+            long allocated = 0, uint attributes = 0);
 
-        /// <summary>Файл: id, id родителя, имя, размер и даты FILETIME (UTC).</summary>
-        void File(int id, int parent, string name, long size, long createdUtc, long lastWriteUtc);
+        /// <summary>Файл: id, id родителя, имя, размер, даты FILETIME (UTC), «На диске» и атрибуты.</summary>
+        void File(int id, int parent, string name, long size, long createdUtc, long lastWriteUtc,
+            long allocated = 0, uint attributes = 0);
 
         /// <summary>Обход завершён. skippedLinks — отброшенные junction/symlink-каталоги.</summary>
         void End(long skippedLinks);
@@ -74,7 +77,8 @@ namespace WinDiskMap.Core
                 rootCreated = rootEntry.CreatedUtc;
                 rootLastWrite = rootEntry.LastWriteUtc;
             }
-            sink.Begin(displayRoot, rootCreated, rootLastWrite);
+            sink.Begin(displayRoot, rootCreated, rootLastWrite,
+                       rootEntry.Allocated, rootEntry.Attributes);
             prog.AddDir();
 
             long links = 0;
@@ -96,21 +100,22 @@ namespace WinDiskMap.Core
                 _tree = new TreeBuilder(session, prog);
             }
 
-            public void Begin(string displayRoot, long createdUtc = 0, long lastWriteUtc = 0)
+            public void Begin(string displayRoot, long createdUtc = 0, long lastWriteUtc = 0,
+                long allocated = 0, uint attributes = 0)
             {
-                _tree.Begin(displayRoot, false, createdUtc, lastWriteUtc);
+                _tree.Begin(displayRoot, false, createdUtc, lastWriteUtc, allocated, attributes);
             }
 
             public void Dir(int id, int parent, string name, bool reparse,
-                long createdUtc, long lastWriteUtc)
+                long createdUtc, long lastWriteUtc, long allocated = 0, uint attributes = 0)
             {
-                _tree.Dir(id, parent, name, reparse, createdUtc, lastWriteUtc);
+                _tree.Dir(id, parent, name, reparse, createdUtc, lastWriteUtc, allocated, attributes);
             }
 
             public void File(int id, int parent, string name, long size,
-                long createdUtc, long lastWriteUtc)
+                long createdUtc, long lastWriteUtc, long allocated = 0, uint attributes = 0)
             {
-                _tree.File(id, parent, name, size, createdUtc, lastWriteUtc);
+                _tree.File(id, parent, name, size, createdUtc, lastWriteUtc, allocated, attributes);
             }
 
             public void End(long skippedLinks) { }
@@ -268,14 +273,16 @@ namespace WinDiskMap.Core
                         if (e.IsDir)
                         {
                             int id = _nextId++;
-                            _sink.Dir(id, chunk.Id, e.Name, e.IsReparse, e.CreatedUtc, e.LastWriteUtc);
+                            _sink.Dir(id, chunk.Id, e.Name, e.IsReparse, e.CreatedUtc, e.LastWriteUtc,
+                                      e.Allocated, e.Attributes);
                             PutPath(id, full);
                             stack.Push(new Job { Id = id, Path = LongPath(full) });
                         }
                         else
                         {
                             int id = _nextId++;
-                            _sink.File(id, chunk.Id, e.Name, e.Size, e.CreatedUtc, e.LastWriteUtc);
+                            _sink.File(id, chunk.Id, e.Name, e.Size, e.CreatedUtc, e.LastWriteUtc,
+                                       e.Allocated, e.Attributes);
                         }
                     }
 

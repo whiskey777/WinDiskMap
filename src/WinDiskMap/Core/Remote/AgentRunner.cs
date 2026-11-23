@@ -107,7 +107,8 @@ namespace WinDiskMap.Core.Remote
 
             long files = 0, dirs = 0, bytes = 0;
             writer.Dir(0, -1, idx.Names[rootIndex], idx.IsReparse[rootIndex],
-                       idx.CreatedUtc[rootIndex], idx.LastWriteUtc[rootIndex]);
+                       idx.CreatedUtc[rootIndex], idx.LastWriteUtc[rootIndex],
+                       idx.Allocated[rootIndex], idx.Attributes[rootIndex]);
             dirs++;
 
             var queue = new System.Collections.Generic.Queue<int[]>();
@@ -124,7 +125,8 @@ namespace WinDiskMap.Core.Remote
                     if (idx.IsDir[k])
                     {
                         writer.Dir(nextId, cur[1], idx.Names[k], idx.IsReparse[k],
-                                   idx.CreatedUtc[k], idx.LastWriteUtc[k]);
+                                   idx.CreatedUtc[k], idx.LastWriteUtc[k],
+                                   idx.Allocated[k], idx.Attributes[k]);
                         dirs++;
                         queue.Enqueue(new[] { k, nextId });
                         nextId++;
@@ -132,7 +134,8 @@ namespace WinDiskMap.Core.Remote
                     else
                     {
                         writer.File(nextId, cur[1], idx.Names[k], idx.Sizes[k],
-                                    idx.CreatedUtc[k], idx.LastWriteUtc[k]);
+                                    idx.CreatedUtc[k], idx.LastWriteUtc[k],
+                                    idx.Allocated[k], idx.Attributes[k]);
                         files++;
                         bytes += idx.Sizes[k];
                         nextId++;
@@ -169,22 +172,23 @@ namespace WinDiskMap.Core.Remote
                 _prog = prog;
             }
 
-            public void Begin(string displayRoot, long createdUtc = 0, long lastWriteUtc = 0)
+            public void Begin(string displayRoot, long createdUtc = 0, long lastWriteUtc = 0,
+                long allocated = 0, uint attributes = 0)
             {
-                _writer.Dir(0, -1, displayRoot, false, createdUtc, lastWriteUtc);
+                _writer.Dir(0, -1, displayRoot, false, createdUtc, lastWriteUtc, allocated, attributes);
             }
 
             public void Dir(int id, int parent, string name, bool reparse,
-                long createdUtc, long lastWriteUtc)
+                long createdUtc, long lastWriteUtc, long allocated = 0, uint attributes = 0)
             {
-                _writer.Dir(id, parent, name, reparse, createdUtc, lastWriteUtc);
+                _writer.Dir(id, parent, name, reparse, createdUtc, lastWriteUtc, allocated, attributes);
                 _prog.AddDir();
             }
 
             public void File(int id, int parent, string name, long size,
-                long createdUtc, long lastWriteUtc)
+                long createdUtc, long lastWriteUtc, long allocated = 0, uint attributes = 0)
             {
-                _writer.File(id, parent, name, size, createdUtc, lastWriteUtc);
+                _writer.File(id, parent, name, size, createdUtc, lastWriteUtc, allocated, attributes);
                 _prog.AddFile(size);
             }
 

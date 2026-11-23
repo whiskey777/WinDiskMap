@@ -43,6 +43,11 @@ namespace WinDiskMap
   WinDiskMap \\server\share --headless    сетевая шара: обход каталогов (MFT недоступен)
   WinDiskMap --remote hostB --path C:\ --csv h.csv   удалённый скан C:\ на hostB (WinRM)
 
+CSV — единый формат «WizTree +»: первые 7 колонок (Имя файла;Размер;На диске;Изменено;
+Атрибуты;Файлы;Папки) совпадают с экспортом WizTree по имени и смыслу, затем идут
+Глубина;Родитель;Имя;Категория;РазмерЧеловеческий;Доля и колонки тома в строке корня.
+Разделитель «;», UTF-8 с BOM.
+
 TUI (открывается сразу, дерево пополняется по мере сканирования):
   ↑↓ навигация   ← свернуть/к родителю   → развернуть   Enter открыть файл/переключить папку
   f фильтр (папки / папки+файлы / tmp / дампы)   s сортировка (размер↓/↑, имя↑/↓)
@@ -86,6 +91,11 @@ Examples:
   WinDiskMap C:\ --csv d.csv --only dumps CSV: dumps only
   WinDiskMap \\server\share --headless    network share: directory walk (no MFT)
   WinDiskMap --remote hostB --path C:\ --csv h.csv   remote scan of C:\ on hostB (WinRM)
+
+CSV — single ""WizTree +"" format: the first 7 columns (File name;Size;On disk;Modified;
+Attributes;Files;Folders) match WizTree export in name and meaning, followed by
+Depth;Parent;Name;Category;SizeHuman;Percent and volume columns in the root row.
+Separator "";"", UTF-8 with BOM.
 
 TUI (opens immediately, the tree fills in as the scan progresses):
   ↑↓ navigate   ← collapse/parent   → expand   Enter open file/toggle folder

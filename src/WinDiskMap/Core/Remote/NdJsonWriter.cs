@@ -51,7 +51,7 @@ namespace WinDiskMap.Core.Remote
         }
 
         public void Dir(int id, int parent, string name, bool reparse,
-            long createdUtc = 0, long lastWriteUtc = 0)
+            long createdUtc = 0, long lastWriteUtc = 0, long allocated = 0, uint attributes = 0)
         {
             _sb.Length = 0;
             _sb.Append("{\"t\":\"dir\",\"id\":").Append(id)
@@ -59,6 +59,8 @@ namespace WinDiskMap.Core.Remote
                .Append(",\"reparse\":").Append(reparse ? "true" : "false")
                .Append(",\"c\":").Append(createdUtc)
                .Append(",\"w\":").Append(lastWriteUtc)
+               .Append(",\"a\":").Append(allocated)
+               .Append(",\"f\":").Append(attributes)
                .Append(",\"name\":");
             NdJson.WriteString(_sb, name);
             _sb.Append('}');
@@ -66,7 +68,7 @@ namespace WinDiskMap.Core.Remote
         }
 
         public void File(int id, int parent, string name, long size,
-            long createdUtc = 0, long lastWriteUtc = 0)
+            long createdUtc = 0, long lastWriteUtc = 0, long allocated = 0, uint attributes = 0)
         {
             _sb.Length = 0;
             _sb.Append("{\"t\":\"file\",\"id\":").Append(id)
@@ -74,6 +76,8 @@ namespace WinDiskMap.Core.Remote
                .Append(",\"size\":").Append(size)
                .Append(",\"c\":").Append(createdUtc)
                .Append(",\"w\":").Append(lastWriteUtc)
+               .Append(",\"a\":").Append(allocated)
+               .Append(",\"f\":").Append(attributes)
                .Append(",\"name\":");
             NdJson.WriteString(_sb, name);
             _sb.Append('}');

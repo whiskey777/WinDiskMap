@@ -11,6 +11,10 @@ namespace WinDiskMap.Core
         public bool IsDir;
         public bool IsReparse;
         public long Size;
+        /// <summary>«На диске»: реально занятые байты (FILE_STANDARD_INFO.AllocationSize).</summary>
+        public long Allocated;
+        /// <summary>FILE_ATTRIBUTE_* битмаска из WIN32_FIND_DATA.</summary>
+        public uint Attributes;
 
         /// <summary>FILETIME (UTC, 100 нс с 1601). 0 — неизвестно.</summary>
         public long CreatedUtc;
@@ -67,6 +71,64 @@ namespace WinDiskMap.Core
         [DllImport("kernel32.dll", SetLastError = true)]
         private static extern bool FindClose(IntPtr hFindFile);
 
+        [StructLayout(LayoutKind.Sequential)]
+        private struct FILE_STANDARD_INFO
+        {
+            public long AllocationSize;
+            public long EndOfFile;
+            public uint NumberOfLinks;
+            public byte DeletePending;
+            public byte Directory;
+        }
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        private static extern IntPtr CreateFileW(string lpFileName, uint dwDesiredAccess, uint dwShareMode,
+            IntPtr lpSecurityAttributes, uint dwCreationDisposition, uint dwFlagsAndAttributes, IntPtr hTemplateFile);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool GetFileInformationByHandleEx(IntPtr hFile, int fileInformationClass,
+            out FILE_STANDARD_INFO lpFileInformation, uint dwBufferSize);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool CloseHandle(IntPtr hObject);
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        private static extern uint GetCompressedFileSizeW(string lpFileName, out uint lpFileSizeHigh);
+
+        /// <summary>
+        /// Выделенный размер файла («На диске»): AllocationSize из FILE_STANDARD_INFO —
+        /// это сумма кластеров, то есть то же, что WizTree берёт из data runs в MFT.
+        /// GetCompressedFileSizeW не подходит: на NTFS он возвращает логический размер.
+        /// Если файл нельзя открыть (блокировка/доступ), пробуем его и затем логический размер.
+        /// </summary>
+        private static long GetAllocated(string fullPath, long logicalSize)
+        {
+            const uint FileReadAttributes = 0x80;
+            const uint ShareAll = 1 | 2 | 4;
+            const uint OpenExisting = 3;
+            const int FileStandardInfo = 1;
+
+            IntPtr h = CreateFileW(fullPath, FileReadAttributes, ShareAll, IntPtr.Zero,
+                                   OpenExisting, 0, IntPtr.Zero);
+            if (h != new IntPtr(-1))
+            {
+                try
+                {
+                    FILE_STANDARD_INFO info;
+                    if (GetFileInformationByHandleEx(h, FileStandardInfo, out info,
+                                                     (uint)Marshal.SizeOf(typeof(FILE_STANDARD_INFO))))
+                        return info.AllocationSize;
+                }
+                finally { CloseHandle(h); }
+            }
+
+            uint high;
+            uint low = GetCompressedFileSizeW(fullPath, out high);
+            if (low == uint.MaxValue && Marshal.GetLastWin32Error() != 0) return logicalSize;
+            long value = ((long)high << 32) | low;
+            return value < 0 ? logicalSize : value;
+        }
+
         /// <summary>
         /// Читает каталог целиком. Возвращает false, если каталог недоступен или исчез
         /// (эквивалент прежних catch-блоков: такой каталог остаётся пустым узлом).
@@ -112,13 +174,17 @@ namespace WinDiskMap.Core
                         continue;
                     }
 
+                    long logical = ((long)data.nFileSizeHigh << 32) | data.nFileSizeLow;
                     list.Add(new Win32Entry
                     {
                         Name = name,
                         IsDir = isDir,
                         IsReparse = reparse,
                         // Размер файла — из записи каталога (для папок всегда 0).
-                        Size = ((long)data.nFileSizeHigh << 32) | data.nFileSizeLow,
+                        Size = logical,
+                        // Один дополнительный сисколл на файл: «На диске» для CSV в формате WizTree.
+                        Allocated = isDir ? 0 : GetAllocated(path + "\\" + name, logical),
+                        Attributes = data.dwFileAttributes,
                         // WIN32_FIND_DATA уже содержит обе даты — дополнительных сисколлов нет.
                         CreatedUtc = ((long)data.ftCreationTimeHigh << 32) | data.ftCreationTimeLow,
                         LastWriteUtc = ((long)data.ftLastWriteTimeHigh << 32) | data.ftLastWriteTimeLow
@@ -155,6 +221,8 @@ namespace WinDiskMap.Core
                     IsDir = (data.dwFileAttributes & FileAttributeDirectory) != 0,
                     IsReparse = (data.dwFileAttributes & FileAttributeReparsePoint) != 0,
                     Size = ((long)data.nFileSizeHigh << 32) | data.nFileSizeLow,
+                    Allocated = 0,
+                    Attributes = data.dwFileAttributes,
                     CreatedUtc = ((long)data.ftCreationTimeHigh << 32) | data.ftCreationTimeLow,
                     LastWriteUtc = ((long)data.ftLastWriteTimeHigh << 32) | data.ftLastWriteTimeLow
                 };

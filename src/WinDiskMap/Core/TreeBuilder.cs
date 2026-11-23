@@ -30,7 +30,7 @@ namespace WinDiskMap.Core
 
         /// <summary>Создаёт корень поддерева. id корня — 0.</summary>
         public void Begin(string displayRoot, bool reparse = false,
-            long createdUtc = 0, long lastWriteUtc = 0)
+            long createdUtc = 0, long lastWriteUtc = 0, long allocated = 0, uint attributes = 0)
         {
             string rootName = Path.GetFileName(displayRoot);
             if (string.IsNullOrEmpty(rootName)) rootName = displayRoot;
@@ -42,6 +42,9 @@ namespace WinDiskMap.Core
                 Depth = 0,
                 IsDir = true,
                 IsReparse = reparse,
+                Attributes = attributes,
+                Allocated = allocated,
+                OwnAllocated = allocated,
                 CreatedUtc = createdUtc,
                 LastWriteUtc = lastWriteUtc,
                 Parent = null,
@@ -52,7 +55,7 @@ namespace WinDiskMap.Core
         }
 
         public void Dir(int id, int parent, string name, bool reparse,
-            long createdUtc = 0, long lastWriteUtc = 0)
+            long createdUtc = 0, long lastWriteUtc = 0, long allocated = 0, uint attributes = 0)
         {
             Node parentNode = Resolve(parent);
             var child = new Node(null)
@@ -62,6 +65,9 @@ namespace WinDiskMap.Core
                 Depth = parentNode.Depth + 1,
                 IsDir = true,
                 IsReparse = reparse,
+                Attributes = attributes,
+                Allocated = allocated,
+                OwnAllocated = allocated,
                 CreatedUtc = createdUtc,
                 LastWriteUtc = lastWriteUtc,
                 Parent = parentNode
@@ -75,11 +81,12 @@ namespace WinDiskMap.Core
         }
 
         public void File(int id, int parent, string name, long size,
-            long createdUtc = 0, long lastWriteUtc = 0)
+            long createdUtc = 0, long lastWriteUtc = 0, long allocated = 0, uint attributes = 0)
         {
             Node parentNode = Resolve(parent);
             Put(id, null);
-            lock (_session.Sync) parentNode.AddLiveFile(name, size, createdUtc, lastWriteUtc);
+            lock (_session.Sync) parentNode.AddLiveFile(name, size, createdUtc, lastWriteUtc,
+                                                        allocated, attributes);
             if (_countProgress) _prog.AddFile(size);
         }
 

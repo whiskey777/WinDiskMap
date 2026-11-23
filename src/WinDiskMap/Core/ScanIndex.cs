@@ -17,6 +17,8 @@ namespace WinDiskMap.Core
         public readonly List<string> Names = new List<string>(1 << 16);
         public readonly List<int> Parents = new List<int>(1 << 16);
         public readonly List<long> Sizes = new List<long>(1 << 16);   // только для файлов
+        public readonly List<long> Allocated = new List<long>(1 << 16);   // «На диске»: реально занятые байты
+        public readonly List<uint> Attributes = new List<uint>(1 << 16);  // FILE_ATTRIBUTE_* битмаска
         public readonly List<long> CreatedUtc = new List<long>(1 << 16);    // FILETIME, 0 — неизвестно
         public readonly List<long> LastWriteUtc = new List<long>(1 << 16);  // FILETIME, 0 — неизвестно
         public readonly List<bool> IsDir = new List<bool>(1 << 16);
@@ -27,16 +29,20 @@ namespace WinDiskMap.Core
         public long TotalDirs;
         public long TotalReparseDirs;
         public long TotalBytes;
+        public long TotalAllocated;
 
         private Dictionary<int, List<int>> _children;
 
         public int Add(string name, int parent, long size, bool isDir, bool isReparse,
-            long createdUtc = 0, long lastWriteUtc = 0)
+            long createdUtc = 0, long lastWriteUtc = 0,
+            long allocated = 0, uint attributes = 0)
         {
             int i = Names.Count;
             Names.Add(name);
             Parents.Add(parent);
             Sizes.Add(size);
+            Allocated.Add(allocated);
+            Attributes.Add(attributes);
             CreatedUtc.Add(createdUtc);
             LastWriteUtc.Add(lastWriteUtc);
             IsDir.Add(isDir);
@@ -44,7 +50,7 @@ namespace WinDiskMap.Core
             // Reparse-папки (junction/symlink) в счётчик папок не входят — как у WizTree;
             // в дереве они остаются (лист с нулевым размером).
             if (isDir) { if (isReparse) TotalReparseDirs++; else TotalDirs++; }
-            else { TotalFiles++; TotalBytes += size; }
+            else { TotalFiles++; TotalBytes += size; TotalAllocated += allocated; }
             return i;
         }
 
@@ -206,6 +212,7 @@ namespace WinDiskMap.Core
                 Depth = 0,
                 IsDir = true,
                 IsReparse = IsReparse[rootIndex],
+                Attributes = Attributes[rootIndex],
                 CreatedUtc = CreatedUtc[rootIndex],
                 LastWriteUtc = LastWriteUtc[rootIndex],
                 Parent = null,
@@ -221,13 +228,18 @@ namespace WinDiskMap.Core
         }
 
         /// <summary>Пост-порядочный обход: сначала дети, потом родитель. Глубина дерева мала (&lt;100).</summary>
-        private long AggregateSizes(Node node)
+        private void AggregateSizes(Node node)
         {
-            long sum = node.OwnSize;
+            long size = node.OwnSize;
+            long allocated = node.OwnAllocated;
             for (int i = 0; i < node.Dirs.Count; i++)
-                sum += AggregateSizes(node.Dirs[i]);
-            node.Size = sum;
-            return sum;
+            {
+                AggregateSizes(node.Dirs[i]);
+                size += node.Dirs[i].Size;
+                allocated += node.Dirs[i].Allocated;
+            }
+            node.Size = size;
+            node.Allocated = allocated;
         }
 
         private void BuildNode(Node node, int index)
@@ -245,6 +257,7 @@ namespace WinDiskMap.Core
                         Depth = node.Depth + 1,
                         IsDir = true,
                         IsReparse = IsReparse[k],
+                        Attributes = Attributes[k],
                         CreatedUtc = CreatedUtc[k],
                         LastWriteUtc = LastWriteUtc[k],
                         Parent = node
@@ -256,6 +269,7 @@ namespace WinDiskMap.Core
                 {
                     node.FileIndices.Add(k);
                     node.OwnSize += Sizes[k];
+                    node.OwnAllocated += Allocated[k];
                 }
             }
         }

@@ -125,19 +125,23 @@ namespace WinDiskMap.Core.Remote
                         {
                             st.Began = true;
                             st.Tree.Begin(displayRoot, NdJson.GetBool(line, "reparse"),
-                                          NdJson.GetLong(line, "c"), NdJson.GetLong(line, "w"));
+                                          NdJson.GetLong(line, "c"), NdJson.GetLong(line, "w"),
+                                          NdJson.GetLong(line, "a"),
+                                          (uint)NdJson.GetLong(line, "f"));
                             break; // корень агента → отображаемый корень хоста
                         }
                         st.Tree.Dir(id, parent, NdJson.GetString(line, "name"),
                                     NdJson.GetBool(line, "reparse"),
-                                    NdJson.GetLong(line, "c"), NdJson.GetLong(line, "w"));
+                                    NdJson.GetLong(line, "c"), NdJson.GetLong(line, "w"),
+                                    NdJson.GetLong(line, "a"), (uint)NdJson.GetLong(line, "f"));
                     }
                     break;
 
                 case "file":
                     st.Tree.File(NdJson.GetInt(line, "id"), NdJson.GetInt(line, "parent", -1),
                                  NdJson.GetString(line, "name"), NdJson.GetLong(line, "size"),
-                                 NdJson.GetLong(line, "c"), NdJson.GetLong(line, "w"));
+                                 NdJson.GetLong(line, "c"), NdJson.GetLong(line, "w"),
+                                 NdJson.GetLong(line, "a"), (uint)NdJson.GetLong(line, "f"));
                     break;
 
                 case "end":

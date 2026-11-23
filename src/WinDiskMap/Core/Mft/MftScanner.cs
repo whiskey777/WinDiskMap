@@ -178,6 +178,8 @@ namespace WinDiskMap.Core.Mft
 
             bool isDir = (flags & 0x02) != 0;
             long size = 0;
+            long allocated = 0;   // «На диске»: allocated size из $DATA (offset +0x28)
+            uint fileAttributes = 0; // FILE_ATTRIBUTE_* из $STANDARD_INFORMATION / $FILE_NAME
             bool gotSize = false;
             bool reparse = false;
             long fnSize = 0;
@@ -214,8 +216,9 @@ namespace WinDiskMap.Core.Mft
                             siCreated = BitConverter.ToInt64(rec, attrOfs + siOfs);
                             siLastWrite = BitConverter.ToInt64(rec, attrOfs + siOfs + 0x08);
                         }
-                        if ((BitConverter.ToUInt32(rec, attrOfs + siOfs + 0x20) & 0x400) != 0)
-                            reparse = true;
+                        uint siAttrs = BitConverter.ToUInt32(rec, attrOfs + siOfs + 0x20);
+                        if (fileAttributes == 0) fileAttributes = siAttrs;
+                        if ((siAttrs & 0x400) != 0) reparse = true;
                     }
                 }
                 else if (type == AttrFileName && nameLen == 0 && nonRes == 0)
@@ -249,7 +252,9 @@ namespace WinDiskMap.Core.Mft
                         haveFnSize = true;
                         // FILE_ATTRIBUTE_REPARSE_POINT в флагах FN: junction/symlink-папки
                         // видны в дереве, но не входят в счётчик папок (как у WizTree).
-                        if ((BitConverter.ToUInt32(rec, c + 0x38) & 0x400) != 0) reparse = true;
+                        uint fnAttrs = BitConverter.ToUInt32(rec, c + 0x38);
+                        if (fileAttributes == 0) fileAttributes = fnAttrs;
+                        if ((fnAttrs & 0x400) != 0) reparse = true;
                     }
                 }
                 else if (type == AttrData && nameLen == 0 && !gotSize)
@@ -262,6 +267,9 @@ namespace WinDiskMap.Core.Mft
                     else
                     {
                         // Логический (real) размер данных — как основной размер файла у WizTree.
+                        // Выделенный размер лежит на 8 байт раньше (+0x28) — это и есть
+                        // колонка «На диске» в экспорте WizTree (сумма кластеров data runs).
+                        allocated = BitConverter.ToInt64(rec, attrOfs + 0x28);
                         size = BitConverter.ToInt64(rec, attrOfs + 0x30);
                         gotSize = true;
                     }
@@ -288,7 +296,7 @@ namespace WinDiskMap.Core.Mft
                 // (расширение может встретиться и до, и после базовой записи).
                 if ((scratch.Count > 0 || gotSize) && baseRec > 0 && baseRec <= int.MaxValue)
                     collector.AddExtension((int)baseRec, scratch, size, gotSize, isDir, reparse,
-                                           createdUtc, lastWriteUtc);
+                                           createdUtc, lastWriteUtc, allocated, fileAttributes);
                 MaybeDump(rec, recordSize, recNo, baseRec, true, isDir, scratch, size, gotSize,
                           fnSize, haveFnSize);
                 return true;
@@ -299,14 +307,15 @@ namespace WinDiskMap.Core.Mft
                 // Корень тома (запись 5) может не иметь $FILE_NAME: его имя — метка тома,
                 // при пустой метке длина имени равна 0. Без фикса корень «не найден».
                 if (recNo == ScanIndex.RootRecord && isDir)
-                    collector.Add(recNo, ".", -1, 0, true, false, 2, createdUtc, lastWriteUtc);
+                    collector.Add(recNo, ".", -1, 0, true, false, 2, createdUtc, lastWriteUtc,
+                                  allocated, fileAttributes);
                 return true; // без имени — пропускаем молча
             }
 
             for (int i = 0; i < scratch.Count; i++)
                 collector.Add(recNo, scratch.Names[i], scratch.Parents[i],
                               isDir ? 0 : size, isDir, isDir && reparse, scratch.Ranks[i],
-                              createdUtc, lastWriteUtc);
+                              createdUtc, lastWriteUtc, allocated, fileAttributes);
             MaybeDump(rec, recordSize, recNo, baseRec, false, isDir, scratch, size, gotSize,
                       fnSize, haveFnSize);
             return true;
@@ -731,6 +740,8 @@ namespace WinDiskMap.Core.Mft
             private readonly List<string> _names = new List<string>(1 << 16);
             private readonly List<long> _parentRecs = new List<long>(1 << 16);
             private readonly List<long> _sizes = new List<long>(1 << 16);
+            private readonly List<long> _allocated = new List<long>(1 << 16);
+            private readonly List<uint> _attributes = new List<uint>(1 << 16);
             private readonly List<long> _created = new List<long>(1 << 16);
             private readonly List<long> _lastWrite = new List<long>(1 << 16);
             private readonly List<byte> _ranks = new List<byte>(1 << 16);
@@ -746,6 +757,8 @@ namespace WinDiskMap.Core.Mft
                 public readonly List<string> Names = new List<string>(2);
                 public readonly List<byte> Ranks = new List<byte>(2);
                 public long Size;
+                public long Allocated;
+                public uint Attributes;
                 public bool GotSize;
                 public bool IsDir;
                 public bool Reparse;
@@ -760,12 +773,15 @@ namespace WinDiskMap.Core.Mft
             public int ReparseDirCount { get { return _reparseDirCount; } }
 
             public int Add(int recNo, string name, long parentRec, long size, bool isDir, bool reparse,
-                byte nameRank = 2, long createdUtc = 0, long lastWriteUtc = 0)
+                byte nameRank = 2, long createdUtc = 0, long lastWriteUtc = 0,
+                long allocated = 0, uint attributes = 0)
             {
                 _recNos.Add(recNo);
                 _names.Add(name);
                 _parentRecs.Add(parentRec);
                 _sizes.Add(size);
+                _allocated.Add(allocated);
+                _attributes.Add(attributes);
                 _created.Add(createdUtc);
                 _lastWrite.Add(lastWriteUtc);
                 _ranks.Add(nameRank);
@@ -781,7 +797,8 @@ namespace WinDiskMap.Core.Mft
 
             /// <summary>FN-ссылки и размер из расширенной записи $ATTRIBUTE_LIST по базовой записи.</summary>
             public void AddExtension(int baseRec, FnScratch scratch, long size, bool gotSize, bool isDir,
-                bool reparse, long createdUtc = 0, long lastWriteUtc = 0)
+                bool reparse, long createdUtc = 0, long lastWriteUtc = 0,
+                long allocated = 0, uint attributes = 0)
             {
                 ExtData e;
                 if (!_ext.TryGetValue(baseRec, out e))
@@ -796,6 +813,8 @@ namespace WinDiskMap.Core.Mft
                 // Несколько extension-$DATA (split-атрибут): размер осмысленен у экстента
                 // с VCN 0; у остальных поля могут быть нулевыми/меньшими — берём максимум.
                 if (gotSize && size > e.Size) { e.Size = size; e.GotSize = true; }
+                if (allocated > e.Allocated) e.Allocated = allocated;
+                if (e.Attributes == 0 && attributes != 0) e.Attributes = attributes;
                 if (isDir) e.IsDir = true;
                 if (reparse) e.Reparse = true;
             }
@@ -863,7 +882,7 @@ namespace WinDiskMap.Core.Mft
                         for (int j = 0; j < e.Parents.Count; j++)
                             Add(recNo, e.Names[j], e.Parents[j],
                                 e.IsDir ? 0 : e.Size, e.IsDir, e.IsDir && e.Reparse, e.Ranks[j],
-                                e.CreatedUtc, e.LastWriteUtc);
+                                e.CreatedUtc, e.LastWriteUtc, e.Allocated, e.Attributes);
                         continue;
                     }
 
@@ -893,6 +912,13 @@ namespace WinDiskMap.Core.Mft
                     if (!isDir && e.GotSize && e.Size > _sizes[first])
                         for (int r = 0; r < rows.Count; r++) _sizes[rows[r]] = e.Size;
 
+                    // Аналогично для «На диске» и атрибутов из extension-записи.
+                    if (!isDir && e.Allocated > _allocated[first])
+                        for (int r = 0; r < rows.Count; r++) _allocated[rows[r]] = e.Allocated;
+                    if (e.Attributes != 0)
+                        for (int r = 0; r < rows.Count; r++)
+                            if (_attributes[rows[r]] == 0) _attributes[rows[r]] = e.Attributes;
+
                     // reparse-флаг мог быть только в расширении (FN/SI там же).
                     if (isDir && reparse && !_isReparse[first])
                     {
@@ -904,6 +930,8 @@ namespace WinDiskMap.Core.Mft
                     // (родитель, имя): хардлинки в одном каталоге дают разные строки,
                     // а DOS-алиас (ns=2) уступает длинному имени.
                     long size = _sizes[first];
+                    long allocated = _allocated[first];
+                    uint attributes = _attributes[first];
                     for (int j = 0; j < e.Parents.Count; j++)
                     {
                         long p = e.Parents[j];
@@ -927,7 +955,7 @@ namespace WinDiskMap.Core.Mft
                         {
                             if (!hasLong)
                                 rows.Add(Add(recNo, e.Names[j], p, isDir ? 0 : size, isDir, isDir && reparse,
-                                             0, e.CreatedUtc, e.LastWriteUtc));
+                                             0, e.CreatedUtc, e.LastWriteUtc, allocated, attributes));
                             continue;
                         }
                         if (dosRow >= 0)
@@ -937,7 +965,7 @@ namespace WinDiskMap.Core.Mft
                             continue;
                         }
                         rows.Add(Add(recNo, e.Names[j], p, isDir ? 0 : size, isDir, isDir && reparse,
-                                     e.Ranks[j], e.CreatedUtc, e.LastWriteUtc));
+                                     e.Ranks[j], e.CreatedUtc, e.LastWriteUtc, allocated, attributes));
                     }
                 }
             }
@@ -961,7 +989,7 @@ namespace WinDiskMap.Core.Mft
                         dirByRec.TryGetValue((int)_parentRecs[i], out pi))
                         parent = pi;
                     indexOf[i] = index.Add(_names[i], parent, _sizes[i], _isDirs[i], _isReparse[i],
-                                           _created[i], _lastWrite[i]);
+                                           _created[i], _lastWrite[i], _allocated[i], _attributes[i]);
                 }
 
                 int root;

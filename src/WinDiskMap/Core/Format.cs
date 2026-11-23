@@ -26,6 +26,22 @@ namespace WinDiskMap.Core
             return value.ToString("N0", CultureInfo.InvariantCulture);
         }
 
+        /// <summary>Дата в формате экспорта WizTree: yyyy.MM.dd HH:mm:ss (местное время).</summary>
+        public static string CsvTime(long filetimeUtc)
+        {
+            if (filetimeUtc <= 0) return "";
+            try
+            {
+                DateTime local = DateTime.FromFileTimeUtc(filetimeUtc).ToLocalTime();
+                if (local.Year < 1900 || local.Year > 2100) return "";
+                return local.ToString("yyyy.MM.dd HH:mm:ss", CultureInfo.InvariantCulture);
+            }
+            catch
+            {
+                return "";
+            }
+        }
+
         /// <summary>Процент от общего объёма (берущегося из root), аккуратный вывод.</summary>
         public static string Percent(long part, long whole)
         {

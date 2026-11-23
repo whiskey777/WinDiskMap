@@ -67,7 +67,9 @@ namespace WinDiskMap.Core.Remote
                                     began = true;
                                     break;
                                 }
-                                tree.Dir(id, parent, name, reparse);
+                                tree.Dir(id, parent, name, reparse,
+                                         NdJson.GetLong(line, "c"), NdJson.GetLong(line, "w"),
+                                         NdJson.GetLong(line, "a"), (uint)NdJson.GetLong(line, "f"));
                             }
                             break;
 
@@ -77,7 +79,9 @@ namespace WinDiskMap.Core.Remote
                                 int parent = NdJson.GetInt(line, "parent", -1);
                                 string name = NdJson.GetString(line, "name");
                                 long size = NdJson.GetLong(line, "size");
-                                tree.File(id, parent, name, size);
+                                tree.File(id, parent, name, size,
+                                          NdJson.GetLong(line, "c"), NdJson.GetLong(line, "w"),
+                                          NdJson.GetLong(line, "a"), (uint)NdJson.GetLong(line, "f"));
                             }
                             break;
 
