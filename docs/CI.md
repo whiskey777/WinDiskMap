@@ -29,11 +29,17 @@
    - Bypass list: оставить пустым. Если добавить сюда `Repository admins`, правила не будут
      действовать на администраторов — это аналог старого «Include administrators», только
      наоборот.
-   - Require a pull request before merging: `Require approvals = 1`, `Dismiss stale approvals`.
+   - Require a pull request before merging: галочка **Require approvals снята**
+     (`required_approving_review_count: 0`). Для одного maintainer'а это необходимо: автор не может
+     одобрить свой собственный PR, поэтому при `approvals = 1` PR, созданный вами, было бы нельзя
+     замержить без второго аккаунта. Сам PR и чеки при этом остаются обязательными, а прямой push в
+     `main` по-прежнему запрещён. `Dismiss stale approvals` можно оставить включённым.
    - Require status checks to pass: `build + smoke test`, `analyze (csharp)` и
      `dependency review`. В Rulesets имена можно ввести вручную и нажать `+`; `dependency review`
      появится в выпадающем списке только после первого PR.
-   - Require branches to be up to date before merging.
+   - Require branches to be up to date before merging: если за время ожидания чеков в `main`
+     попал другой PR, нажмите **Update branch** и дождитесь повторного прогона — иначе merge будет
+     отклонён с `3 of 3 required status checks are expected`.
    - Require conversation resolution before merging.
    - Block force pushes и Block deletions.
 3. **Settings → Actions → General**
