@@ -4,6 +4,14 @@
 [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/), версии — на
 [Semantic Versioning](https://semver.org/lang/ru/).
 
+## [Unreleased]
+
+### Добавлено
+
+- Переключение тем TUI по `t` (также работает физическая клавиша `T` в русской раскладке):
+  `VS Code Dark` по умолчанию, `Нортон / FAR` и прежняя палитра как запасная.
+  Выбор сохраняется в `%APPDATA%\WinDiskMap\theme.txt`.
+
 ## [1.0.0-beta.1] — 2026-11-24
 
 ### Добавлено
