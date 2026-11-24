@@ -21,14 +21,21 @@
    - Dependabot alerts / security updates — включить.
    - Secret scanning — включить.
    - Secret scanning push protection — включить (блокирует коммит с секретом до отправки).
-2. **Settings → Branches → Branch protection rules** для `main`:
-   - Require a pull request before merging: 1 approval, dismiss stale approvals.
+2. **Settings → Rules → Rulesets → Add/New branch ruleset** (кнопка `Add branch ruleset`,
+   которую вы видите, — это и есть замена классических Branch protection rules; старые правила,
+   если они есть, работают параллельно и складываются по принципу «самое строгое побеждает»):
+   - Enforcement status: **Active**.
+   - Target branches: **Include default branch** (`main`).
+   - Bypass list: оставить пустым. Если добавить сюда `Repository admins`, правила не будут
+     действовать на администраторов — это аналог старого «Include administrators», только
+     наоборот.
+   - Require a pull request before merging: `Require approvals = 1`, `Dismiss stale approvals`.
    - Require status checks to pass: `build + smoke test`, `analyze (csharp)` и
-     `dependency review` (последний появится после первого PR).
+     `dependency review`. В Rulesets имена можно ввести вручную и нажать `+`; `dependency review`
+     появится в выпадающем списке только после первого PR.
    - Require branches to be up to date before merging.
    - Require conversation resolution before merging.
-   - Block force pushes and branch deletion.
-   - Include administrators — опционально, но рекомендуется.
+   - Block force pushes и Block deletions.
 3. **Settings → Actions → General**
    - Workflow permissions: `Read repository contents and packages` (по умолчанию уже так).
    - Allow GitHub Actions to create and approve pull requests — выключить, если не используем
