@@ -28,7 +28,7 @@ function New-Key([char]$char, [ConsoleKey]$key, [bool]$shift = $false) {
 try {
     $asm   = [Reflection.Assembly]::LoadFrom($dll)
     $theme = $asm.GetType('WinDiskMap.Tui.Theme', $true)
-    $flags = [Reflection.BindingFlags]'Static,Public,NonPublic'
+    $flags = [Reflection.BindingFlags]'Static,Instance,Public,NonPublic'
 
     $isThemeKey = $theme.GetMethod('IsThemeKey', $flags)
     Assert-True $isThemeKey.Invoke($null, @(New-Key 't' ([ConsoleKey]::T))) 'латинская T'
@@ -39,7 +39,25 @@ try {
 
     $all = $theme.GetField('All', $flags).GetValue($null)
     $ids = @($all | ForEach-Object { $_.Id })
-    Assert-True (($ids -join ',') -eq 'vscode-dark,nc-far,classic') 'порядок тем: VS Code → FAR → классика'
+    Assert-True (($ids -join ',') -eq 'modern-dark,nc-far,classic') 'порядок тем: Modern Dark → FAR → классика'
+
+    $esc = [string][char]27
+    $hard = $theme.GetField('HardReset', $flags).GetValue($null)
+    Assert-True ($hard -eq ($esc + '[0m')) 'жёсткий сброс при выходе'
+
+    # Палитра не должна зависеть от схемы терминала: никаких индексированных
+    # 256-цветов и базовых 16 кодов, только явный RGB.
+    $seqFields = @('Reset','Dim','Header','Folder','File','Temp','Dump','Warn','SortActive')
+    $bad = @()
+    foreach ($p in $all) {
+        foreach ($n in $seqFields) {
+            $v = [string]$p.GetType().GetField($n, $flags).GetValue($p)
+            if ($v -match '38;5;|48;5;|\[(9[0-7]|3[0-7]|4[0-7])m') { $bad += "$($p.Id).$n" }
+        }
+        $reset = [string]$p.GetType().GetField('Reset', $flags).GetValue($p)
+        Assert-True ($reset -match '48;2;') "$($p.Id): фон задан в RGB"
+    }
+    Assert-True ($bad.Count -eq 0) "RGB у всех тем ($($bad -join ','))"
 
     $init = $theme.GetMethod('Init', $flags)
     $cycle = $theme.GetMethod('Cycle', $flags)
@@ -47,7 +65,7 @@ try {
     $current = $theme.GetProperty('Current', $flags)
 
     $init.Invoke($null, $null)
-    Assert-True ($index.GetValue($null) -eq 0) 'тема по умолчанию — VS Code Dark'
+    Assert-True ($index.GetValue($null) -eq 0) 'тема по умолчанию — Modern Dark'
 
     [void]$cycle.Invoke($null, $null)
     Assert-True ($current.GetValue($null).Id -eq 'nc-far') 'цикл: следующая тема — Нортон/FAR'
@@ -60,6 +78,11 @@ try {
     Set-Content -LiteralPath $settings -Value 'no-such-theme' -NoNewline
     $init.Invoke($null, $null)
     Assert-True ($index.GetValue($null) -eq 0) 'неизвестное значение — тема по умолчанию'
+
+    [void]$cycle.Invoke($null, $null)
+    Set-Content -LiteralPath $settings -Value 'vscode-dark' -NoNewline
+    $init.Invoke($null, $null)
+    Assert-True ($current.GetValue($null).Id -eq 'modern-dark') 'старый id vscode-dark совместим'
 
     "THEME OK"
 }

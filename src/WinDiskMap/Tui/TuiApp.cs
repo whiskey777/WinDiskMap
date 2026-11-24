@@ -88,6 +88,9 @@ namespace WinDiskMap.Tui
         {
             Console.Write("\x1b[?25l");
             EnableMouse(true);
+            // Заливаем экран фоном активной темы до первого кадра: иначе
+            // незаполненные строки остались бы в цвете схемы терминала.
+            ClearWithThemeBackground();
             try
             {
                 while (_running)
@@ -123,10 +126,7 @@ namespace WinDiskMap.Tui
                     bool resized = rawW != _lastWidth || rawH != _lastHeight;
                     if (resized) { _lastWidth = rawW; _lastHeight = rawH; }
 
-                    if (resized)
-                    {
-                        try { Console.Write("\x1b[2J"); } catch { }
-                    }
+                    if (resized) ClearWithThemeBackground();
 
                     // Пока идёт скан — рисуем каждый проход (живой прогресс); после —
                     // только по действию пользователя, изменению размера или в момент
@@ -144,8 +144,26 @@ namespace WinDiskMap.Tui
             finally
             {
                 EnableMouse(false);
-                Console.Write("\x1b[?25h" + ColorReset);
+                // Возвращаем терминалу его собственные цвета: после выхода
+                // приглашение командной строки не должно остаться в нашей теме.
+                Console.Write("\x1b[?25h" + Theme.HardReset);
             }
+        }
+
+        /// <summary>Полная очистка экрана с фоновым цветом активной темы.</summary>
+        private static void ClearWithThemeBackground()
+        {
+            try
+            {
+                Console.Write(ColorReset + "\x1b[2J\x1b[H");
+            }
+            catch (IOException ex) { NoteClear(ex); }
+            catch (ObjectDisposedException ex) { NoteClear(ex); }
+        }
+
+        private static void NoteClear(Exception ex)
+        {
+            Debug.WriteLine("WinDiskMap TUI screen clear failed: " + ex.Message);
         }
 
         // ---------- Состояние (вызывается до рендера) ----------
@@ -269,6 +287,8 @@ namespace WinDiskMap.Tui
             {
                 Palette theme = Theme.Cycle();
                 _status = Loc.T("Тема: ", "Theme: ") + theme.Name(Loc.Ru);
+                // Старые строки могли остаться в фоне предыдущей темы.
+                ClearWithThemeBackground();
                 return;
             }
 
@@ -515,11 +535,11 @@ namespace WinDiskMap.Tui
             {
                 var sb = new StringBuilder(512);
                 sb.Append("\x1b[").Append(y).Append(';').Append(x).Append('H').Append(ColorWarn);
-                sb.Append(top).Append("\x1b[K\r\n");
-                sb.Append("\x1b[").Append(y + 1).Append(';').Append(x).Append('H');
-                sb.Append(mid).Append("\x1b[K\r\n");
-                sb.Append("\x1b[").Append(y + 2).Append(';').Append(x).Append('H');
-                sb.Append(bot).Append("\x1b[K");
+                sb.Append(top).Append(ColorReset).Append("\x1b[K\r\n");
+                sb.Append("\x1b[").Append(y + 1).Append(';').Append(x).Append('H').Append(ColorWarn);
+                sb.Append(mid).Append(ColorReset).Append("\x1b[K\r\n");
+                sb.Append("\x1b[").Append(y + 2).Append(';').Append(x).Append('H').Append(ColorWarn);
+                sb.Append(bot).Append(ColorReset).Append("\x1b[K");
                 sb.Append("\x1b[").Append(y + 1).Append(';').Append(x + 2).Append('H');
                 Console.Write(sb.ToString());
 

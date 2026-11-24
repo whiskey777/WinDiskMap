@@ -51,7 +51,7 @@ Depth,Parent,Name,Category,SizeHuman,Percent и колонки тома в ст�
 
 TUI (открывается сразу, дерево пополняется по мере сканирования):
   ↑↓ навигация   ← свернуть/к родителю   → развернуть   Enter открыть файл/переключить папку
-  t тема (VS Code Dark → Нортон/FAR → классика), выбор сохраняется между запусками
+  t тема (Modern Dark → Нортон/FAR → классика), выбор сохраняется между запусками
   f фильтр (папки / папки+файлы / tmp / дампы)   s сортировка (размер↓/↑, имя↑/↓)
   e экспорт дерева в CSV   Del удалить (с подтверждением)   колесо мыши — прокрутка   q выход
   окно перерисовывается автоматически при изменении размера консоли
@@ -102,7 +102,7 @@ does not depend on --lang or the OS locale (no banner line before the header).
 
 TUI (opens immediately, the tree fills in as the scan progresses):
   ↑↓ navigate   ← collapse/parent   → expand   Enter open file/toggle folder
-  t theme (VS Code Dark → Norton/FAR → classic), choice is saved between runs
+  t theme (Modern Dark → Norton/FAR → classic), choice is saved between runs
   f filter (folders / folders+files / tmp / dumps)   s sort (size↓/↑, name↑/↓)
   e export tree to CSV   Del delete (with confirmation)   mouse wheel — scroll   q quit
   the window redraws automatically when the console is resized
@@ -397,8 +397,9 @@ Exit codes: 0 — ok, 1 — bad arguments, 2 — scan error, 3 — no terminal."
 
             new TuiApp(session).Run();
 
-            // Чистый выход: стираем экран TUI, никаких остатков футера/статусов.
-            Console.Write("\x1b[2J\x1b[H");
+            // Чистый выход: сначала возвращаем терминалу его цвета, затем стираем
+            // экран TUI, чтобы после выхода не осталось фона нашей темы.
+            Console.Write(Theme.HardReset + "\x1b[2J\x1b[H");
 
             if (session.Error != null)
             {
