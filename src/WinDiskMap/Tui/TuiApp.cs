@@ -153,7 +153,17 @@ namespace WinDiskMap.Tui
         /// <summary>Полная очистка экрана с фоновым цветом активной темы.</summary>
         private static void ClearWithThemeBackground()
         {
-            try { Console.Write(ColorReset + "\x1b[2J\x1b[H"); } catch { }
+            try
+            {
+                Console.Write(ColorReset + "\x1b[2J\x1b[H");
+            }
+            catch (IOException ex) { NoteClear(ex); }
+            catch (ObjectDisposedException ex) { NoteClear(ex); }
+        }
+
+        private static void NoteClear(Exception ex)
+        {
+            Debug.WriteLine("WinDiskMap TUI screen clear failed: " + ex.Message);
         }
 
         // ---------- Состояние (вызывается до рендера) ----------
