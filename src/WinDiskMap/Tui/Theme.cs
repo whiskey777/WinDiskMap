@@ -24,11 +24,13 @@ namespace WinDiskMap.Tui
         public readonly string Dump;
         public readonly string Warn;
         public readonly string SortActive;
+        /// <summary>Клавиши в строке подсказок: отличимы от обычного текста.</summary>
+        public readonly string Key;
 
         public Palette(string id, string nameRu, string nameEn,
                        string reset, string dim, string header,
                        string folder, string file, string temp, string dump,
-                       string warn, string sortActive)
+                       string warn, string sortActive, string key)
         {
             Id = id;
             NameRu = nameRu;
@@ -42,6 +44,7 @@ namespace WinDiskMap.Tui
             Dump = dump;
             Warn = warn;
             SortActive = sortActive;
+            Key = key;
         }
 
         public string Name(bool ru)
@@ -77,7 +80,8 @@ namespace WinDiskMap.Tui
                 temp: "\x1b[38;2;210;153;102m",
                 dump: "\x1b[38;2;163;113;196m",
                 warn: "\x1b[1;38;2;248;81;73m\x1b[48;2;55;20;20m",
-                sortActive: "\x1b[1;48;2;36;79;120m\x1b[38;2;255;255;255m"),
+                sortActive: "\x1b[1;48;2;36;79;120m\x1b[38;2;255;255;255m",
+                key: "\x1b[1;38;2;227;179;65m"),
 
             // Классика Norton Commander / Far Manager: синие панели, жёлтые
             // каталоги, белая шапка, контрастный красный диалог удаления.
@@ -94,7 +98,8 @@ namespace WinDiskMap.Tui
                 temp: "\x1b[38;2;0;255;255m",
                 dump: "\x1b[38;2;255;0;255m",
                 warn: "\x1b[1;48;2;192;0;0m\x1b[38;2;255;255;255m",
-                sortActive: "\x1b[1;48;2;0;0;160m\x1b[38;2;255;255;0m"),
+                sortActive: "\x1b[1;48;2;0;0;160m\x1b[38;2;255;255;0m",
+                key: "\x1b[1;38;2;255;255;85m"),
 
             // Прежняя палитра beta.1, переписанная в RGB: тот же «характер»,
             // но без зависимости от ColorTable реестра и схемы Windows Terminal.
@@ -110,7 +115,8 @@ namespace WinDiskMap.Tui
                 temp: "\x1b[38;2;220;220;0m",
                 dump: "\x1b[38;2;220;0;220m",
                 warn: "\x1b[1;38;2;255;100;100m",
-                sortActive: "\x1b[38;2;12;12;12m\x1b[48;2;220;220;0m")
+                sortActive: "\x1b[38;2;12;12;12m\x1b[48;2;220;220;0m",
+                key: "\x1b[1;38;2;255;255;85m")
         };
 
         public static int Index { get; private set; }

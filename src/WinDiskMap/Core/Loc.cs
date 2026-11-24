@@ -11,6 +11,47 @@ namespace WinDiskMap.Core
     /// </summary>
     public static class Loc
     {
+        /// <summary>Одна подсказка футера: клавиша и её описание.</summary>
+        public struct KeyHint
+        {
+            public readonly string Key;
+            public readonly string Description;
+
+            public KeyHint(string key, string description)
+            {
+                Key = key;
+                Description = description;
+            }
+        }
+
+        private static readonly KeyHint[] RuKeyHints =
+        {
+            new KeyHint("↑↓", "навигация"),
+            new KeyHint("t", "тема"),
+            new KeyHint("←", "свернуть/к родителю"),
+            new KeyHint("→", "развернуть"),
+            new KeyHint("Enter", "открыть файл/папку"),
+            new KeyHint("f", "фильтр"),
+            new KeyHint("s", "сортировка+направление"),
+            new KeyHint("e", "экспорт"),
+            new KeyHint("Del", "удалить"),
+            new KeyHint("q", "выход")
+        };
+
+        private static readonly KeyHint[] EnKeyHints =
+        {
+            new KeyHint("↑↓", "navigate"),
+            new KeyHint("t", "theme"),
+            new KeyHint("←", "collapse/parent"),
+            new KeyHint("→", "expand"),
+            new KeyHint("Enter", "open file/folder"),
+            new KeyHint("f", "filter"),
+            new KeyHint("s", "sort+direction"),
+            new KeyHint("e", "export"),
+            new KeyHint("Del", "delete"),
+            new KeyHint("q", "quit")
+        };
+
         private static bool _ru;
 
         public static bool Ru { get { return _ru; } }
@@ -28,14 +69,25 @@ namespace WinDiskMap.Core
             return _ru ? ru : en;
         }
 
-        /// <summary>Подсказка клавиш в футере TUI.</summary>
+        /// <summary>Подсказки футера TUI: клавиша + описание (клавишу красим отдельно).</summary>
+        public static KeyHint[] KeyHints
+        {
+            get { return _ru ? RuKeyHints : EnKeyHints; }
+        }
+
+        /// <summary>Плоский текст подсказок — для логов и тестов; рендер красит клавиши.</summary>
         public static string KeysHint
         {
             get
             {
-                return _ru
-                    ? " ↑↓ навигация  t тема  ← свернуть/к родителю  → развернуть  Enter открыть файл/папку  f фильтр  s сортировка+направление  e экспорт  Del удалить  q выход"
-                    : " ↑↓ navigate  t theme  ← collapse/parent  → expand  Enter open file/folder  f filter  s sort+direction  e export  Del delete  q quit";
+                var sb = new System.Text.StringBuilder(160);
+                KeyHint[] hints = KeyHints;
+                for (int i = 0; i < hints.Length; i++)
+                {
+                    if (i > 0) sb.Append("  ");
+                    sb.Append(hints[i].Key).Append(' ').Append(hints[i].Description);
+                }
+                return sb.ToString();
             }
         }
 

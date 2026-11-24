@@ -47,7 +47,7 @@ try {
 
     # Палитра не должна зависеть от схемы терминала: никаких индексированных
     # 256-цветов и базовых 16 кодов, только явный RGB.
-    $seqFields = @('Reset','Dim','Header','Folder','File','Temp','Dump','Warn','SortActive')
+    $seqFields = @('Reset','Dim','Header','Folder','File','Temp','Dump','Warn','SortActive','Key')
     $bad = @()
     foreach ($p in $all) {
         foreach ($n in $seqFields) {
