@@ -52,8 +52,8 @@ cd WinDiskMap
 
 | Архив | Что внутри | Когда выбирать |
 |---|---|---|
-| `WinDiskMap-portable-net48-v1.0.0-beta.1.zip` | `WinDiskMap.exe` (~50 КБ), использует .NET Framework 4.8, встроенный в Windows | Обычный выбор на Windows 10/11/Server. Именно этот EXE WinRM-транспорт копирует на удалённый хост как агента. |
-| `WinDiskMap-portable-win-x64-selfcontained-v1.0.0-beta.1.zip` | один `WinDiskMap.exe` (~30 МБ) со встроенным .NET 8 | Нужен, если на машине нет .NET 8 и не хочется зависеть от системного Framework. |
+| `WinDiskMap-portable-net48-v1.0.0-beta.2.zip` | `WinDiskMap.exe` (~50 КБ), использует .NET Framework 4.8, встроенный в Windows | Обычный выбор на Windows 10/11/Server. Именно этот EXE WinRM-транспорт копирует на удалённый хост как агента. |
+| `WinDiskMap-portable-win-x64-selfcontained-v1.0.0-beta.2.zip` | один `WinDiskMap.exe` (~30 МБ) со встроенным .NET 8 | Нужен, если на машине нет .NET 8 и не хочется зависеть от системного Framework. |
 
 Оба архива функционально одинаковы — разница только в runtime. Они распаковываются в любую
 папку, ничего не устанавливают и не пишут в реестр; внутри — `WinDiskMap.exe`, `README.txt`,

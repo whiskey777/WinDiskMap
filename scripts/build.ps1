@@ -1,5 +1,5 @@
 # Сборка Release: net8.0 (основной запуск) + net48 (агент WinRM).
-# Версия берётся из csproj, если не передана явно: -Version 1.0.0-beta.1
+# Версия берётся из csproj, если не передана явно: -Version 1.0.0-beta.2
 param(
     [string]$Version
 )
