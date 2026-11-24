@@ -20,15 +20,17 @@ namespace WinDiskMap.Tui
     /// </summary>
     internal sealed class TuiApp
     {
-        private const string ColorReset = "\x1b[0m";
-        private const string ColorDim = "\x1b[90m";
-        private const string ColorHeader = "\x1b[7m";
-        private const string ColorFolder = "\x1b[1;36m";
-        private const string ColorFile = "\x1b[37m";
-        private const string ColorTemp = "\x1b[33m";
-        private const string ColorDump = "\x1b[35m";
-        private const string ColorWarn = "\x1b[1;91m";   // ярко-красный: опасные действия
-        private const string ColorSortActive = "\x1b[1;7;33m"; // инверсия + жёлтый: активная колонка
+        // Цвета берутся из активной темы; при переключении T достаточно одного
+        // полного ререндера — остальной код работает с этими св-вами как раньше.
+        private static string ColorReset { get { return Theme.Current.Reset; } }
+        private static string ColorDim { get { return Theme.Current.Dim; } }
+        private static string ColorHeader { get { return Theme.Current.Header; } }
+        private static string ColorFolder { get { return Theme.Current.Folder; } }
+        private static string ColorFile { get { return Theme.Current.File; } }
+        private static string ColorTemp { get { return Theme.Current.Temp; } }
+        private static string ColorDump { get { return Theme.Current.Dump; } }
+        private static string ColorWarn { get { return Theme.Current.Warn; } }       // опасные действия
+        private static string ColorSortActive { get { return Theme.Current.SortActive; } } // активная колонка
 
         // Воздух между колонками. 2 пробела — достаточно для читаемости; перед
         // группой дат делаем шире, чтобы отделить «временны́е» колонки от размеров.
@@ -260,6 +262,16 @@ namespace WinDiskMap.Tui
 
         private void HandleKey(ConsoleKeyInfo key)
         {
+            // T (и та же физическая клавиша в русской раскладке) — цикл тем.
+            // Проверяем до switch: в ru-раскладке ConsoleKey может быть E, и тогда
+            // обычный case ConsoleKey.E запустил бы экспорт вместо смены темы.
+            if (Theme.IsThemeKey(key))
+            {
+                Palette theme = Theme.Cycle();
+                _status = Loc.T("Тема: ", "Theme: ") + theme.Name(Loc.Ru);
+                return;
+            }
+
             switch (key.Key)
             {
                 case ConsoleKey.UpArrow: _cursor--; break;
@@ -837,8 +849,9 @@ namespace WinDiskMap.Tui
         {
             string arrow = sortDesc ? "↓" : "↑";
 
-            // Активная колонка выделяется инверсией + жёлтым и несёт стрелку направления;
-            // остальные остаются обычной инверсной шапкой. Ширина колонок фиксированная,
+            // Активная колонка выделяется цветом активной сортировки из текущей темы
+            // и несёт стрелку направления; остальные остаются обычной шапкой.
+            // Ширина колонок фиксированная,
             // поэтому вставка стрелки не сдвигает правые колонки.
             bool nameActive = sort == SortMode.Name;
             string left = " " + Loc.T("Путь", "Path") + (nameActive ? " " + arrow : "");
