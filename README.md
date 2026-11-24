@@ -19,8 +19,8 @@ WinDiskMap показывает, что занимает место на дис�
   по Ctrl+C и мышь SGR (колесо, клик).
 - **Два режима сбора** — прямое чтение `$MFT` (администратор, локальный NTFS) и фолбэк
   обходом каталогов (без прав, UNC, не-NTFS). Оба дают одинаковые цифры.
-- **Удалённый скан по WinRM** — на хост копируется только `WinDiskMap.exe`, данные идут
-  потоком NDJSON, дерево и CSV строятся локально.
+- **Удалённый скан по WinRM** — на хост копируется только `WinDiskMap.exe` сборки net48, данные
+  идут потоком NDJSON, дерево и CSV строятся локально.
 - **CSV** — UTF-8 с BOM, разделитель `,`, потоковая запись, фильтры и ограничение глубины.
 - **Headless и журнал** — `--headless` для скриптов, `--log <файл>` для диагностики.
 - **Два языка интерфейса** — ru/en, автоопределение по локали ОС.
@@ -45,16 +45,22 @@ WinDiskMap показывает, что занимает место на дис�
 git clone https://github.com/whiskey777/WinDiskMap.git
 cd WinDiskMap
 .\scripts\build.ps1
-.\scripts\package.ps1
+.\scripts\package.ps1 -SelfContained
 ```
 
-В `artifacts\` появятся `WinDiskMap-portable-net48-v1.0.0.zip` (EXE для .NET Framework 4.8,
-встроен в Windows) и `WinDiskMap-portable-win-x64-selfcontained-v1.0.0.zip` (автономный
-net8.0). Архивы распаковываются в любую папку, ничего не устанавливают и не пишут в
-реестр; внутри — `WinDiskMap.exe`, `README.txt`, `LICENSE.txt` и `SHA256SUMS.txt`.
+В `artifacts\` появятся два архива:
+
+| Архив | Что внутри | Когда выбирать |
+|---|---|---|
+| `WinDiskMap-portable-net48-v1.0.0-beta.1.zip` | `WinDiskMap.exe` (~50 КБ), использует .NET Framework 4.8, встроенный в Windows | Обычный выбор на Windows 10/11/Server. Именно этот EXE WinRM-транспорт копирует на удалённый хост как агента. |
+| `WinDiskMap-portable-win-x64-selfcontained-v1.0.0-beta.1.zip` | один `WinDiskMap.exe` (~30 МБ) со встроенным .NET 8 | Нужен, если на машине нет .NET 8 и не хочется зависеть от системного Framework. |
+
+Оба архива функционально одинаковы — разница только в runtime. Они распаковываются в любую
+папку, ничего не устанавливают и не пишут в реестр; внутри — `WinDiskMap.exe`, `README.txt`,
+`LICENSE.txt` и `SHA256SUMS.txt`.
 
 Для работы из исходников после `build.ps1` используйте
-`src\WinDiskMap\bin\Release\net48\WinDiskMap.exe` или
+`src\WinDiskMap\bin\Release\net48\WinDiskMap.exe` (агент WinRM; .NET Framework 4.8 уже в ОС) или
 `src\WinDiskMap\bin\Release\net8.0\WinDiskMap.exe` (нужен .NET 8 Runtime).
 Подробности — [сборка и упаковка](docs/BUILD.md).
 
