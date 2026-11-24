@@ -7,12 +7,14 @@ namespace WinDiskMap.Tui
     /// <summary>
     /// Набор ANSI-атрибутов одного варианта оформления. Все значения — готовые
     /// escape-последовательности: рендер просто подставляет их в StringBuilder.
+    /// Цвета заданы в RGB, чтобы внешний вид не зависел от colorScheme терминала.
     /// </summary>
     internal sealed class Palette
     {
         public readonly string Id;
         public readonly string NameRu;
         public readonly string NameEn;
+        /// <summary>Обычный текст и фон; возвращается после любой подсветки.</summary>
         public readonly string Reset;
         public readonly string Dim;
         public readonly string Header;
@@ -50,58 +52,65 @@ namespace WinDiskMap.Tui
 
     /// <summary>
     /// Темы TUI и сохранение выбора между запусками. Порядок в цикле:
-    /// VS Code Dark (по умолчанию) → Norton/FAR → классическая тема beta.1.
+    /// Modern Dark (по умолчанию) → Norton/FAR → классическая тема beta.1.
+    /// Все палитры используют 24-битный RGB и собственный фон: результат одинаков
+    /// в Windows Terminal, классическом conhost и встроенном терминале VS Code.
     /// </summary>
     internal static class Theme
     {
+        /// <summary>Возврат к настройкам терминала при выходе из программы.</summary>
+        public const string HardReset = "\x1b[0m";
+
         public static readonly Palette[] All =
         {
-            // Приближение к VS Code Dark Modern: приглушённый серый вместо
-            // комментариев, мягкие акценты, синяя подсветка выделения.
+            // Современная тёмная тема в духе GitHub Dark: тёмный фон #121314,
+            // светлый текст #C9D1D9, приглушённый серый и синяя подсветка.
             new Palette(
-                id: "vscode-dark",
-                nameRu: "VS Code Dark",
-                nameEn: "VS Code Dark",
-                reset: "\x1b[0m",
-                dim: "\x1b[38;5;245m",
-                header: "\x1b[48;5;236;38;5;251m",
-                folder: "\x1b[38;5;80m",
-                file: "\x1b[38;5;251m",
-                temp: "\x1b[38;5;185m",
-                dump: "\x1b[38;5;176m",
-                warn: "\x1b[1;38;5;203m",
-                sortActive: "\x1b[48;5;24;38;5;15m"),
+                id: "modern-dark",
+                nameRu: "Modern Dark",
+                nameEn: "Modern Dark",
+                reset: "\x1b[0m\x1b[38;2;201;209;217m\x1b[48;2;18;19;20m",
+                dim: "\x1b[38;2;139;148;158m",
+                header: "\x1b[48;2;36;79;120m\x1b[38;2;230;237;243m",
+                folder: "\x1b[38;2;88;166;255m",
+                file: "\x1b[38;2;201;209;217m",
+                temp: "\x1b[38;2;210;153;102m",
+                dump: "\x1b[38;2;163;113;196m",
+                warn: "\x1b[1;38;2;248;81;73m\x1b[48;2;55;20;20m",
+                sortActive: "\x1b[1;48;2;36;79;120m\x1b[38;2;255;255;255m"),
 
             // Классика Norton Commander / Far Manager: синие панели, жёлтые
             // каталоги, белая шапка, контрастный красный диалог удаления.
+            // Цвета фиксированы в RGB и не берутся из палитры conhost.
             new Palette(
                 id: "nc-far",
                 nameRu: "Нортон / FAR",
                 nameEn: "Norton / FAR",
-                reset: "\x1b[0m",
-                dim: "\x1b[37m",
-                header: "\x1b[44;97m",
-                folder: "\x1b[1;93m",
-                file: "\x1b[37m",
-                temp: "\x1b[96m",
-                dump: "\x1b[95m",
-                warn: "\x1b[1;97;41m",
-                sortActive: "\x1b[44;1;93m"),
+                reset: "\x1b[0m\x1b[38;2;255;255;255m\x1b[48;2;0;0;128m",
+                dim: "\x1b[38;2;192;192;192m",
+                header: "\x1b[1;48;2;0;0;160m\x1b[38;2;255;255;255m",
+                folder: "\x1b[1;38;2;255;255;0m",
+                file: "\x1b[38;2;255;255;255m",
+                temp: "\x1b[38;2;0;255;255m",
+                dump: "\x1b[38;2;255;0;255m",
+                warn: "\x1b[1;48;2;192;0;0m\x1b[38;2;255;255;255m",
+                sortActive: "\x1b[1;48;2;0;0;160m\x1b[38;2;255;255;0m"),
 
-            // Прежняя палитра beta.1 — запасной вариант.
+            // Прежняя палитра beta.1, переписанная в RGB: тот же «характер»,
+            // но без зависимости от ColorTable реестра и схемы Windows Terminal.
             new Palette(
                 id: "classic",
                 nameRu: "Классика WinDiskMap",
                 nameEn: "WinDiskMap classic",
-                reset: "\x1b[0m",
-                dim: "\x1b[90m",
-                header: "\x1b[7m",
-                folder: "\x1b[1;36m",
-                file: "\x1b[37m",
-                temp: "\x1b[33m",
-                dump: "\x1b[35m",
-                warn: "\x1b[1;91m",
-                sortActive: "\x1b[1;7;33m")
+                reset: "\x1b[0m\x1b[38;2;204;204;204m\x1b[48;2;12;12;12m",
+                dim: "\x1b[38;2;128;128;128m",
+                header: "\x1b[38;2;12;12;12m\x1b[48;2;204;204;204m",
+                folder: "\x1b[1;38;2;0;192;192m",
+                file: "\x1b[38;2;204;204;204m",
+                temp: "\x1b[38;2;220;220;0m",
+                dump: "\x1b[38;2;220;0;220m",
+                warn: "\x1b[1;38;2;255;100;100m",
+                sortActive: "\x1b[38;2;12;12;12m\x1b[48;2;220;220;0m")
         };
 
         public static int Index { get; private set; }
@@ -141,6 +150,9 @@ namespace WinDiskMap.Tui
             {
                 if (!File.Exists(path)) return;
                 string id = File.ReadAllText(path).Trim();
+                // Старый идентификатор из beta.1 указывал на ту же палитру.
+                if (string.Equals(id, "vscode-dark", StringComparison.OrdinalIgnoreCase))
+                    id = All[0].Id;
                 for (int i = 0; i < All.Length; i++)
                 {
                     if (string.Equals(All[i].Id, id, StringComparison.OrdinalIgnoreCase))
