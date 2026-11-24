@@ -1047,7 +1047,7 @@ namespace WinDiskMap.Tui
             }
 
             char[] spin = { '|', '/', '-', '\\' };
-            int tick = Environment.TickCount / 120 % 4;
+            int tick = SpinnerIndex(Environment.TickCount);
             sb.Append("  ");
             sb.Append(spin[tick]);
             sb.Append("  ");
@@ -1130,6 +1130,15 @@ namespace WinDiskMap.Tui
         {
             try { return Math.Max(8, Console.WindowHeight); }
             catch { return 30; }
+        }
+
+        /// <summary>
+        /// Индекс спиннера 0..3. Environment.TickCount — Int32 и уходит в минус
+        /// после ~24.86 суток аптайма; беззнаковое деление не даёт отрицательный остаток.
+        /// </summary>
+        internal static int SpinnerIndex(int tickCount)
+        {
+            return (int)(((uint)tickCount / 120u) % 4u);
         }
 
         private static void EnableMouse(bool on)
