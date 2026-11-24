@@ -92,12 +92,21 @@ namespace WinDiskMap.Core
         [DllImport("kernel32.dll", SetLastError = true)]
         private static extern bool CloseHandle(IntPtr hObject);
 
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool DeviceIoControl(IntPtr hDevice, uint dwIoControlCode,
+            IntPtr lpInBuffer, uint nInBufferSize, IntPtr lpOutBuffer, uint nOutBufferSize,
+            out uint lpBytesReturned, IntPtr lpOverlapped);
+
         [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
         private static extern uint GetCompressedFileSizeW(string lpFileName, out uint lpFileSizeHigh);
 
         /// <summary>
         /// Выделенный размер файла («На диске»): AllocationSize из FILE_STANDARD_INFO —
-        /// это сумма кластеров, то есть то же, что WizTree берёт из data runs в MFT.
+        /// сумма кластеров, то же, что WizTree берёт из data runs в MFT.
+        /// Нюанс: для резидентных файлов (маленьких, лежащих прямо в MFT-записи) Windows
+        /// возвращает AllocationSize, округлённый до сектора (например, 288 байт), хотя
+        /// реально кластеров не выделено — в MFT это 0. Такие файлы определяем через
+        /// FSCTL_GET_RETRIEVAL_POINTERS: ERROR_HANDLE_EOF означает «экстентов нет».
         /// GetCompressedFileSizeW не подходит: на NTFS он возвращает логический размер.
         /// Если файл нельзя открыть (блокировка/доступ), пробуем его и затем логический размер.
         /// </summary>
@@ -117,7 +126,15 @@ namespace WinDiskMap.Core
                     FILE_STANDARD_INFO info;
                     if (GetFileInformationByHandleEx(h, FileStandardInfo, out info,
                                                      (uint)Marshal.SizeOf(typeof(FILE_STANDARD_INFO))))
+                    {
+                        // Резидентные файлы всегда меньше кластера; дёшево проверяем только их.
+                        // На томе с кластером 512 байт проверка тоже безвредна: если экстенты
+                        // есть, просто доверяем AllocationSize.
+                        if (info.AllocationSize > 0 && info.AllocationSize < 4096 &&
+                            !HasAllocatedExtents(h))
+                            return 0;
                         return info.AllocationSize;
+                    }
                 }
                 finally { CloseHandle(h); }
             }
@@ -127,6 +144,33 @@ namespace WinDiskMap.Core
             if (low == uint.MaxValue && Marshal.GetLastWin32Error() != 0) return logicalSize;
             long value = ((long)high << 32) | low;
             return value < 0 ? logicalSize : value;
+        }
+
+        /// <summary>
+        /// Есть ли у файла реальные data runs. FSCTL_GET_RETRIEVAL_POINTERS с VCN=0
+        /// возвращает ERROR_HANDLE_EOF (38) для резидентного/пустого файла.
+        /// </summary>
+        private static bool HasAllocatedExtents(IntPtr h)
+        {
+            const uint FsctlGetRetrievalPointers = 0x90073;
+            const int ErrorHandleEof = 38;
+
+            IntPtr inBuf = Marshal.AllocHGlobal(8);
+            IntPtr outBuf = Marshal.AllocHGlobal(4096);
+            try
+            {
+                Marshal.WriteInt64(inBuf, 0, 0L);
+                uint returned;
+                bool ok = DeviceIoControl(h, FsctlGetRetrievalPointers,
+                                          inBuf, 8, outBuf, 4096, out returned, IntPtr.Zero);
+                if (ok) return true;
+                return Marshal.GetLastWin32Error() != ErrorHandleEof;
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(outBuf);
+                Marshal.FreeHGlobal(inBuf);
+            }
         }
 
         /// <summary>

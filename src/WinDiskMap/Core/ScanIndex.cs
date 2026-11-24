@@ -205,9 +205,13 @@ namespace WinDiskMap.Core
         /// </summary>
         public Node BuildTree(int rootIndex, string displayPath)
         {
+            string rootName = string.IsNullOrEmpty(displayPath)
+                ? Names[rootIndex]
+                : (Path.GetFileName(displayPath.TrimEnd('\\')) ?? displayPath);
+            if (string.IsNullOrEmpty(rootName)) rootName = displayPath;
             var root = new Node(this)
             {
-                Name = string.IsNullOrEmpty(displayPath) ? Names[rootIndex] : displayPath,
+                Name = rootName,
                 FullPath = displayPath.TrimEnd('\\'),
                 Depth = 0,
                 IsDir = true,
