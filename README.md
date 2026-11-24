@@ -1,5 +1,8 @@
 # WinDiskMap
 
+[![ci](https://github.com/whiskey777/WinDiskMap/actions/workflows/ci.yml/badge.svg)](https://github.com/whiskey777/WinDiskMap/actions/workflows/ci.yml)
+[![codeql](https://github.com/whiskey777/WinDiskMap/actions/workflows/codeql.yml/badge.svg)](https://github.com/whiskey777/WinDiskMap/actions/workflows/codeql.yml)
+
 Консольный анализатор занятого места на диске для Windows: живое TUI-дерево, точный учёт
 размера, CSV-экспорт и удалённый скан по WinRM.
 
@@ -129,15 +132,18 @@ File name,Size,On disk,Modified,Attributes,Files,Folders,Depth,Parent,Name,Categ
 - [Архитектура удалённого скана](docs/ARCHITECTURE.md) — роли процесса, NDJSON, WinRM.
 - [Настройка WinRM](docs/REMOTE-SETUP.md) — чеклист для клиента и хоста.
 - [Проверка точности](docs/BENCHMARK.md) — как проводится сравнение.
-- [Сборка и упаковка](docs/BUILD.md) — скрипты, артефакты, версии.
+- [Сборка и упаковка](docs/BUILD.md) — скрипты, артефакты, версии, подпись.
+- [Непрерывные проверки](docs/CI.md) — CodeQL, Dependabot, Dependency Review, защита ветки.
+- [История изменений](CHANGELOG.md).
 - [Указатель документации](docs/README.md).
 
 ## Ограничения
 
 - Только Windows (P/Invoke `kernel32`/`user32`, прямое чтение `$MFT`).
 - MFT-режим требует прав администратора и локального NTFS; для UNC всегда используется обход.
-- WinRM требует настройки хоста. Portable EXE не подписан — в корпоративной среде возможны
-  предупреждения SmartScreen/EDR (см. [сборку](docs/BUILD.md)).
+- WinRM требует настройки хоста. Архивы из Releases подписываются через SignPath после одобрения
+  запроса; сборки из исходников неподписаны — в корпоративной среде возможны предупреждения
+  SmartScreen/EDR (см. [сборку](docs/BUILD.md)).
 
 ## Лицензия
 

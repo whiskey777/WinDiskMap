@@ -24,6 +24,8 @@
 | Документ | О чём |
 |---|---|
 | [BUILD.md](BUILD.md) | Сборка net8.0/net48, portable-архивы, версионирование, хэши |
+| [CI.md](CI.md) | Quality Gate: CodeQL, Dependency Review, Dependabot, защита ветки |
+| [CODE-SIGNING.md](CODE-SIGNING.md) | Политика подписи, конфигурация SignPath, роли и одобрение релиза |
 | [BENCHMARK.md](BENCHMARK.md) | Методика проверки точности и воспроизводимые замеры |
 
 Для локальной разработки также есть скрипты в [`scripts/`](../scripts): сборка, упаковка и

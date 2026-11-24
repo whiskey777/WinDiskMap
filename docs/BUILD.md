@@ -35,8 +35,8 @@
 
 | Архив | Содержимое |
 |---|---|
-| `WinDiskMap-portable-net48-v1.0.0.zip` | `WinDiskMap.exe`, `WinDiskMap.exe.config`, `README.txt`, `LICENSE.txt`, `SHA256SUMS.txt` |
-| `WinDiskMap-portable-win-x64-selfcontained-v1.0.0.zip` | Один `WinDiskMap.exe` (single-file publish, без .NET Runtime) и те же текстовые файлы |
+| `WinDiskMap-portable-net48-v<Version>.zip` | `WinDiskMap.exe`, `WinDiskMap.exe.config`, `README.txt`, `LICENSE.txt`, `SHA256SUMS.txt` |
+| `WinDiskMap-portable-win-x64-selfcontained-v<Version>.zip` | Один `WinDiskMap.exe` (single-file publish, без .NET Runtime) и те же текстовые файлы |
 
 Архивы не требуют установки, не пишут в реестр и не включаются в git. `SHA256SUMS.txt`
 содержит хэши всех файлов внутри архива — их можно сверить перед запуском в корпоративной
@@ -44,28 +44,31 @@
 
 ## Версионирование
 
-Версия задаётся параметром `-Version` скрипта `package.ps1` (по умолчанию `1.0.0`) и пока
-не хранится в исходниках как константа. При выпуске релиза обновляйте её одновременно в
-скрипте сборки и в примечаниях к релизу.
+Единственный источник версии — `<Version>` в `src\WinDiskMap\WinDiskMap.csproj` (сейчас
+`1.0.0-beta.1`). `build.ps1` и `package.ps1` читают его, если `-Version` не передан;
+`release.yml` дополнительно проверяет, что тег `v<Version>` совпадает со значением в csproj.
+
+`AssemblyVersion`/`FileVersion` — четырёхчисловые (`1.0.0.0`), `InformationalVersion`/
+`ProductVersion` — полная строка (`1.0.0-beta.1`). SDK не дописывает git-SHA благодаря
+`IncludeSourceRevisionInInformationalVersion=false`.
 
 ## Подпись exe
 
-Portable-сборки получаются **неподписанными**: SmartScreen и EDR могут реагировать на новый
-хэш. Возможные варианты:
+Сборки из `scripts/package.ps1` **неподписанные**: SmartScreen и EDR могут реагировать на новый
+хэш. Релизный workflow `release.yml`, при наличии настроенных `SIGNPATH_*`, отправляет артефакт
+в SignPath Foundation и публикует уже подписанные архивы. Политика подписи, конфигурация
+артефакта и порядок одобрения описаны в [CODE-SIGNING.md](CODE-SIGNING.md); XML-конфигурация
+лежит в `signpath/artifact-configuration.xml`.
+
+Другие варианты, если SignPath недоступен:
 
 1. **Самоподписанный сертификат** — бесплатно, но не даёт доверия Windows; подходит только
    для тестов и внутреннего распространения с установкой сертификата в хранилище.
-2. **[SignPath Foundation](https://signpath.org/)** — бесплатная подпись для открытых проектов
-   с публичным репозиторием и OSI-лицензией; ключ хранится в HSM, подпись ставится в CI.
-   Требует соответствия условиям проекта (активность, документация, роли код-ревью и одобрения
-   релиза), сертификат выпускается на имя фонда.
-3. **[Azure Artifact Signing](https://learn.microsoft.com/azure/artifact-signing/overview)** —
+2. **[Azure Artifact Signing](https://learn.microsoft.com/azure/artifact-signing/overview)** —
    управляемый сервис Microsoft с публичным доверием, но требует платной подписки Azure и
    прохождения проверки личности; бесплатная подписка не поддерживается.
-4. **Коммерческий OV/EV-сертификат** — самый прямой путь к «нормальному» доверию и репутации
+3. **Коммерческий OV/EV-сертификат** — самый прямой путь к «нормальному» доверию и репутации
    SmartScreen, но платный; EV дополнительно ускоряет накопление репутации.
-
-Отдельного файла политики подписи в репозитории пока нет.
 
 ## Структура репозитория
 

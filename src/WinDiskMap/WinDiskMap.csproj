@@ -12,6 +12,18 @@
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
     <InvariantGlobalization>true</InvariantGlobalization>
     <NoWarn>$(NoWarn);CA1416</NoWarn>
+
+    <!-- Единственный источник версии. Переопределяется через -p:Version=... в CI. -->
+    <Version>1.0.0-beta.1</Version>
+    <VersionPrefix>$([System.String]::Copy('$(Version)').Split('-')[0])</VersionPrefix>
+    <AssemblyVersion>$(VersionPrefix).0</AssemblyVersion>
+    <FileVersion>$(VersionPrefix).0</FileVersion>
+    <InformationalVersion>$(Version)</InformationalVersion>
+    <!-- Иначе SDK дописывает к ProductVersion "+<git sha>", что ломает проверку метаданных SignPath. -->
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+    <Product>WinDiskMap</Product>
+    <Company>Andrei Korneev</Company>
+    <Copyright>Copyright © 2026 Andrei Korneev</Copyright>
   </PropertyGroup>
 
   <ItemGroup Condition="'$(TargetFramework)' == 'net48'">

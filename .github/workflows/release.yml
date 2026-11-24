@@ -1,0 +1,147 @@
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Существующий тег, например v1.0.0-beta.1'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: build, sign (optional), publish
+    runs-on: windows-latest
+    permissions:
+      contents: write
+      actions: read
+    env:
+      TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+      SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+      SIGNPATH_ORGANIZATION_ID: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+      SIGNPATH_PROJECT_SLUG: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+      SIGNPATH_SIGNING_POLICY_SLUG: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+      SIGNPATH_ARTIFACT_CONFIGURATION_SLUG: ${{ vars.SIGNPATH_ARTIFACT_CONFIGURATION_SLUG }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ env.TAG }}
+          fetch-depth: 0
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Validate tag against csproj version
+        shell: pwsh
+        run: |
+          $tag = $env:TAG
+          if ($tag -notmatch '^v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$') { throw "Bad tag: $tag" }
+          $version = $tag.Substring(1)
+          $match = [regex]::Match((Get-Content -LiteralPath './src/WinDiskMap/WinDiskMap.csproj' -Raw), '<Version>([^<]+)</Version>')
+          if (-not $match.Success) { throw 'No <Version> in csproj' }
+          $declared = $match.Groups[1].Value
+          if ($declared -ne $version) { throw "Tag says $version, csproj says $declared" }
+          "VERSION=$version" >> $env:GITHUB_ENV
+          "FILE_VERSION=$($version.Split('-')[0]).0" >> $env:GITHUB_ENV
+          "Version $version (file version $($version.Split('-')[0]).0)"
+
+      - name: Build portable packages
+        shell: pwsh
+        run: ./scripts/package.ps1 -SelfContained -Version $env:VERSION
+
+      - name: Log unsigned checksums
+        shell: pwsh
+        run: |
+          Get-ChildItem -LiteralPath './artifacts' -Filter '*.zip' | Sort-Object Name | ForEach-Object {
+            "$((Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant())  $($_.Name)"
+          }
+
+      - name: Upload unsigned packages for SignPath
+        id: unsigned
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: unsigned-${{ env.VERSION }}
+          path: artifacts/*.zip
+          if-no-files-found: error
+
+      - name: Submit signing request (when SignPath is configured)
+        id: sign
+        if: ${{ env.SIGNPATH_API_TOKEN != '' && env.SIGNPATH_ORGANIZATION_ID != '' && env.SIGNPATH_PROJECT_SLUG != '' && env.SIGNPATH_SIGNING_POLICY_SLUG != '' && env.SIGNPATH_ARTIFACT_CONFIGURATION_SLUG != '' }}
+        uses: signpath/github-action-submit-signing-request@a2c5b60d9c75f073142b653c354b632eedce097b # v3
+        with:
+          api-token: ${{ env.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ env.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ env.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ env.SIGNPATH_SIGNING_POLICY_SLUG }}
+          artifact-configuration-slug: ${{ env.SIGNPATH_ARTIFACT_CONFIGURATION_SLUG }}
+          github-artifact-id: ${{ steps.unsigned.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: artifacts/signed
+          parameters: |
+            version: "${{ env.VERSION }}"
+            fileVersion: "${{ env.FILE_VERSION }}"
+
+      - name: Stage release files
+        id: stage
+        shell: pwsh
+        run: |
+          $signed = Test-Path -LiteralPath './artifacts/signed'
+          $source = if ($signed) { './artifacts/signed' } else { './artifacts' }
+          New-Item -ItemType Directory -Force -Path './release-files' | Out-Null
+          $zips = Get-ChildItem -LiteralPath $source -Recurse -Filter 'WinDiskMap-portable-*.zip' | Sort-Object Name
+          if ($zips.Count -ne 2) { throw "Expected 2 packages in $source, got $($zips.Count): $($zips.Name -join ', ')" }
+          foreach ($z in $zips) { Copy-Item -LiteralPath $z.FullName -Destination './release-files' -Force }
+          $lines = Get-ChildItem -LiteralPath './release-files' -Filter '*.zip' | Sort-Object Name | ForEach-Object {
+            "$((Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant())  $($_.Name)"
+          }
+          $lines | Set-Content -LiteralPath './release-files/RELEASE_SHA256SUMS.txt' -Encoding utf8
+          $paths = (Get-ChildItem -LiteralPath './release-files' -File | ForEach-Object { $_.FullName }) -join '|'
+          "paths=$paths" >> $env:GITHUB_OUTPUT
+          "signed=$signed" >> $env:GITHUB_OUTPUT
+
+      - name: Write release notes
+        shell: pwsh
+        env:
+          SIGNED: ${{ steps.stage.outputs.signed }}
+        run: |
+          $signing = if ($env:SIGNED -eq 'True') {
+            'Authenticode, сертификат SignPath Foundation (одобрение signing-запроса вручную)'
+          } else {
+            'отсутствует — см. раздел «Code signing policy» в README'
+          }
+          $notes = @"
+          ## WinDiskMap $env:VERSION
+
+          Готовые архивы собраны GitHub Actions из коммита $env:GITHUB_SHA — распакуйте и запускайте, компиляция не нужна.
+
+          - Статус: **beta**. WinRM-режим реализован, но ещё не проверен на реальном удалённом хосте.
+          - Подпись: $signing
+          - Хэши ZIP-архивов: `RELEASE_SHA256SUMS.txt`; внутри каждого архива есть `SHA256SUMS.txt`.
+
+          История изменений: [CHANGELOG.md](https://github.com/whiskey777/WinDiskMap/blob/main/CHANGELOG.md)
+          "@
+          [IO.File]::WriteAllText((Join-Path $env:GITHUB_WORKSPACE 'RELEASE_NOTES.md'), $notes, [Text.UTF8Encoding]::new($false))
+
+      - name: Publish GitHub Release (pre-release)
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_PATHS: ${{ steps.stage.outputs.paths }}
+        run: |
+          $files = $env:RELEASE_PATHS -split '\|' | Where-Object { $_ }
+          $ghArgs = @('release', 'create', $env:TAG, '--prerelease', '--title', "WinDiskMap $env:VERSION", '--notes-file', 'RELEASE_NOTES.md') + $files
+          & gh @ghArgs
+          if ($LASTEXITCODE -ne 0) { throw 'gh release create failed' }

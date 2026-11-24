@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Конфигурация артефакта для SignPath.
+  Скопируйте содержимое в SignPath → Project → Artifact Configurations и
+  укажите её slug в vars.SIGNPATH_ARTIFACT_CONFIGURATION_SLUG.
+  Вызов action'а: signpath/github-action-submit-signing-request@v3.
+-->
+<artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
+  <parameters>
+    <parameter name="version" required="true" />
+    <parameter name="fileVersion" required="true" />
+  </parameters>
+
+  <!-- actions/upload-artifact@v4 кладёт оба ZIP-архива в один внешний ZIP. -->
+  <zip-file>
+    <zip-file path="WinDiskMap-portable-net48-v${version}.zip">
+      <pe-file path="WinDiskMap.exe"
+               product-name="WinDiskMap"
+               product-version="${fileVersion}"
+               file-version="${fileVersion}"
+               company-name="Andrei Korneev"
+               copyright="Copyright 2026 Andrei Korneev">
+        <authenticode-sign />
+      </pe-file>
+    </zip-file>
+
+    <zip-file path="WinDiskMap-portable-win-x64-selfcontained-v${version}.zip">
+      <pe-file path="WinDiskMap.exe"
+               product-name="WinDiskMap"
+               product-version="${fileVersion}"
+               file-version="${fileVersion}"
+               company-name="Andrei Korneev"
+               copyright="Copyright 2026 Andrei Korneev">
+        <authenticode-sign />
+      </pe-file>
+    </zip-file>
+  </zip-file>
+</artifact-configuration>

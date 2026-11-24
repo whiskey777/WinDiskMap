@@ -1,8 +1,9 @@
 # Собирает portable ZIP-пакеты в artifacts/ (без установки, просто распаковать и запустить).
 #   .\scripts\package.ps1                         — net48 (маленький, для Win10/11/Server)
-#   .\scripts\package.ps1 -SelfContained          — плюс net8.0 win-x64 single-file (~70 МБ, без .NET Runtime)
+#   .\scripts\package.ps1 -SelfContained          — плюс net8.0 win-x64 single-file (~30 МБ, без .NET Runtime)
+# Версия по умолчанию берётся из <Version> в csproj — один источник для exe и архивов.
 param(
-    [string]$Version = '1.0.0',
+    [string]$Version,
     [switch]$SelfContained
 )
 $ErrorActionPreference = 'Stop'
@@ -12,6 +13,13 @@ $proj      = Join-Path $root 'src\WinDiskMap\WinDiskMap.csproj'
 $release48 = Join-Path $root 'src\WinDiskMap\bin\Release\net48'
 $artifacts = Join-Path $root 'artifacts'
 New-Item -ItemType Directory -Force -Path $artifacts | Out-Null
+
+if (-not $Version) {
+    $match = [regex]::Match((Get-Content -LiteralPath $proj -Raw), '<Version>([^<]+)</Version>')
+    if (-not $match.Success) { throw "Не найден <Version> в $proj" }
+    $Version = $match.Groups[1].Value
+}
+"VERSION $Version"
 
 function Write-Utf8Bom([string]$path, [string]$text) {
     [System.IO.File]::WriteAllText($path, $text, (New-Object System.Text.UTF8Encoding($true)))
@@ -35,8 +43,9 @@ WinDiskMap $Version — portable ($variant)
 без админа работает обход каталогов (--no-mft).
 
 ВНИМАНИЕ ДЛЯ КОРПОРАТИВНОЙ СРЕДЫ:
-- exe НЕ подписан кодовой подписью. SmartScreen/EDR могут выдать предупреждение
-  или заблокировать запуск — согласуйте хэш из SHA256SUMS.txt со службой безопасности.
+- Если WinDiskMap.exe подписан (сборка из Releases), проверьте вкладку
+  «Цифровые подписи» в свойствах файла. Для неподписанных сборок SmartScreen/EDR
+  могут выдать предупреждение — согласуйте хэш из SHA256SUMS.txt со службой безопасности.
 - Прямое чтение `$MFT` и WinRM-агент (-ExecutionPolicy Bypass) могут появиться
   в телеметрии EDR как подозрительные. Для минимального шума используйте --no-mft
   и локальный запуск без WinRM.
@@ -61,7 +70,7 @@ function Complete-Package([string]$stage, [string]$zip) {
 }
 
 # --- 1) net48: один exe, работает на Windows 10/11/Server без установки .NET ---
-& (Join-Path $PSScriptRoot 'build.ps1')
+& (Join-Path $PSScriptRoot 'build.ps1') -Version $Version
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 $stage48 = Join-Path $artifacts 'portable-net48'
@@ -80,7 +89,7 @@ if ($SelfContained) {
 
     & dotnet publish $proj -c Release -f net8.0 -r win-x64 --self-contained true `
         -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true `
-        -o $stageSc
+        "-p:Version=$Version" -o $stageSc
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
     New-Readme (Join-Path $stageSc 'README.txt') 'WinDiskMap.exe' 'net8.0 win-x64 self-contained (без .NET Runtime)'
