@@ -59,6 +59,15 @@ try {
     }
     Assert-True ($bad.Count -eq 0) "RGB у всех тем ($($bad -join ','))"
 
+    # Клавиши в подсказках должны быть визуально отделены от описаний.
+    $loc = $asm.GetType('WinDiskMap.Core.Loc', $true)
+    $hints = $loc.GetProperty('KeyHints', $flags).GetValue($null)
+    $keys = @($hints | ForEach-Object { $_.Key }) -join ','
+    Assert-True ($keys -eq '↑↓,t,←,→,Enter,f,s,e,Del,q') 'подсказки: все клавиши на месте'
+    $keySeq = [string]$all[0].GetType().GetField('Key', $flags).GetValue($all[0])
+    $dimSeq = [string]$all[0].GetType().GetField('Dim', $flags).GetValue($all[0])
+    Assert-True ($keySeq -ne $dimSeq -and $keySeq -match '38;2;') 'клавиши подсказок выделены отдельным RGB-цветом'
+
     $init = $theme.GetMethod('Init', $flags)
     $cycle = $theme.GetMethod('Cycle', $flags)
     $index = $theme.GetProperty('Index', $flags)
