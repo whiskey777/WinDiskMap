@@ -15,6 +15,7 @@
 - Удалённый скан по WinRM с потоком NDJSON и агентом `net48`.
 - CI/CD: сборка и smoke test, CodeQL, Dependency Review, Dependabot, release workflow с
   опциональной подписью SignPath.
+- Многоразмерная иконка приложения (16–256 px) в ресурсах обоих EXE.
 
 ### Изменено
 

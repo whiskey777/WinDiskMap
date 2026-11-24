@@ -24,6 +24,7 @@
     <Product>WinDiskMap</Product>
     <Company>Andrei Korneev</Company>
     <Copyright>Copyright © 2026 Andrei Korneev</Copyright>
+    <ApplicationIcon>..\..\assets\WinDiskMap.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup Condition="'$(TargetFramework)' == 'net48'">
