@@ -7,7 +7,7 @@
 | Workflow | Когда запускается | Что проверяет |
 |---|---|---|
 | `ci.yml` → `build + smoke test` | push в `main`, PR в `main`, вручную | сборку `net8.0` + `net48` и экспорт CSV через `WinDiskMap.exe --no-mft --headless` |
-| `ci.yml` → `dependency review` | только PR | новые/изменённые зависимости на известные уязвимости; порог `moderate`, комментарий в PR при провале |
+| `ci.yml` → `dependency review` | только PR | новые/изменённые зависимости на известные уязвимости; порог `moderate`, итог в summary проверки |
 | `codeql.yml` → `analyze (csharp)` | push в `main`, PR в `main`, по понедельникам, вручную | статический анализ C#: `security-extended` + `security-and-quality` |
 | `release.yml` | тег `v*` или вручную | сборку архивов, при наличии SignPath — подпись, публикацию pre-release |
 
@@ -62,6 +62,10 @@ CodeQL локально не запускается (нужен Actions), но �
   пояснением, а не отключением всего ruleset'а.
 - **Dependency Review** — сравнивает dependency graph базовой ветки и PR. Обновление ради
   обновления без устранения уязвимости не требуется; Dependabot создаст отдельный PR.
+  Сразу после включения workflow возможен transient `Error: Forbidden`: снимок dependency graph
+  для base commit ещё не готов. Перезапустите job — в этом проекте повтор прошёл успешно.
+  У action `comment-summary-in-pr` выключен: для комментария нужен `pull-requests: write`,
+  а итог и так виден в summary проверки.
 - **Smoke test** — минимальная гарантия, что exe запускается без прав администратора и пишет
   корректную шапку CSV. Полная проверка точности — [BENCHMARK.md](BENCHMARK.md).
 
