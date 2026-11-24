@@ -45,11 +45,11 @@
 ## Версионирование
 
 Единственный источник версии — `<Version>` в `src\WinDiskMap\WinDiskMap.csproj` (сейчас
-`1.0.0-beta.1`). `build.ps1` и `package.ps1` читают его, если `-Version` не передан;
+`1.0.0-beta.2`). `build.ps1` и `package.ps1` читают его, если `-Version` не передан;
 `release.yml` дополнительно проверяет, что тег `v<Version>` совпадает со значением в csproj.
 
 `AssemblyVersion`/`FileVersion` — четырёхчисловые (`1.0.0.0`), `InformationalVersion`/
-`ProductVersion` — полная строка (`1.0.0-beta.1`). SDK не дописывает git-SHA благодаря
+`ProductVersion` — полная строка (`1.0.0-beta.2`). SDK не дописывает git-SHA благодаря
 `IncludeSourceRevisionInInformationalVersion=false`.
 
 ## Подпись exe

@@ -31,6 +31,7 @@ namespace WinDiskMap.Tui
         private static string ColorDump { get { return Theme.Current.Dump; } }
         private static string ColorWarn { get { return Theme.Current.Warn; } }       // опасные действия
         private static string ColorSortActive { get { return Theme.Current.SortActive; } } // активная колонка
+        private static string ColorKey { get { return Theme.Current.Key; } }             // клавиши в подсказках
 
         // Воздух между колонками. 2 пробела — достаточно для читаемости; перед
         // группой дат делаем шире, чтобы отделить «временны́е» колонки от размеров.
@@ -285,8 +286,9 @@ namespace WinDiskMap.Tui
             // обычный case ConsoleKey.E запустил бы экспорт вместо смены темы.
             if (Theme.IsThemeKey(key))
             {
-                Palette theme = Theme.Cycle();
-                _status = Loc.T("Тема: ", "Theme: ") + theme.Name(Loc.Ru);
+                // Название темы теперь постоянный блок в футере; transient-статус
+                // им больше не затирается.
+                Theme.Cycle();
                 // Старые строки могли остаться в фоне предыдущей темы.
                 ClearWithThemeBackground();
                 return;
@@ -971,14 +973,50 @@ namespace WinDiskMap.Tui
             string line1 = " " + (_cursor + 1).ToString("N0") + "/" + _rows.Count.ToString("N0")
                 + " │ " + Loc.T("Фильтр", "Filter") + ": " + FilterName(_filter)
                 + " │ " + Loc.T("Сортировка", "Sort") + ": " + SortCaption()
+                + " │ " + Loc.T("Тема", "Theme") + ": " + Theme.Current.Name(Loc.Ru)
                 + (_status.Length > 0 ? " │ " + _status : "");
             sb.Append(ColorDim);
             sb.Append(PadOrTruncate(line1, width));
             sb.Append("\x1b[K\r\n");
 
             sb.Append("\x1b[").Append(height).Append(";1H");
-            sb.Append(PadOrTruncate(Loc.KeysHint, width));
+            AppendKeysHint(sb, width);
             sb.Append("\x1b[K");
+        }
+
+        /// <summary>
+        /// Подсказка клавиш: сама клавиша выделена акцентом, описание остаётся
+        /// приглушённым. На узком окне описания отбрасываются целиком, чтобы не
+        /// обрезались последние подсказки (в том числе q — выход).
+        /// </summary>
+        private static void AppendKeysHint(StringBuilder sb, int width)
+        {
+            Loc.KeyHint[] hints = Loc.KeyHints;
+            int full = 1; // ведущий пробел, как и в обычной строке
+            for (int i = 0; i < hints.Length; i++)
+            {
+                if (i > 0) full += 2;
+                full += hints[i].Key.Length + 1 + hints[i].Description.Length;
+            }
+            bool compact = full > width;
+
+            int col = 0;
+            sb.Append(ColorDim).Append(' ');
+            col++;
+            for (int i = 0; i < hints.Length; i++)
+            {
+                string sep = i > 0 ? "  " : "";
+                int tokenLen = sep.Length + hints[i].Key.Length
+                    + (compact ? 0 : 1 + hints[i].Description.Length);
+                if (col + tokenLen > width) break;
+
+                sb.Append(ColorDim).Append(sep);
+                sb.Append(ColorKey).Append(hints[i].Key);
+                if (!compact)
+                    sb.Append(ColorDim).Append(' ').Append(hints[i].Description);
+                col += tokenLen;
+            }
+            sb.Append(ColorReset);
         }
 
         private void RenderScanning(int width, int height)
