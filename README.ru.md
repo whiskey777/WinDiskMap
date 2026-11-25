@@ -2,11 +2,7 @@
 
 [English](README.md) | Русский
 
-[![ci](https://github.com/whiskey777/WinDiskMap/actions/workflows/ci.yml/badge.svg)](https://github.com/whiskey777/WinDiskMap/actions/workflows/ci.yml)
-[![codeql](https://github.com/whiskey777/WinDiskMap/actions/workflows/codeql.yml/badge.svg)](https://github.com/whiskey777/WinDiskMap/actions/workflows/codeql.yml)
-
-[![Download](https://img.shields.io/github/v/release/whiskey777/WinDiskMap?label=Download&style=for-the-badge&logo=github)](https://github.com/whiskey777/WinDiskMap/releases/latest)
-![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11%2FServer-0078D6?logo=windows&logoColor=white)
+[![ci](https://github.com/whiskey777/WinDiskMap/actions/workflows/ci.yml/badge.svg)](https://github.com/whiskey777/WinDiskMap/actions/workflows/ci.yml) [![codeql](https://github.com/whiskey777/WinDiskMap/actions/workflows/codeql.yml/badge.svg)](https://github.com/whiskey777/WinDiskMap/actions/workflows/codeql.yml) [![Download](https://img.shields.io/github/v/release/whiskey777/WinDiskMap?label=Download&style=flat&labelColor=24292e&color=28a745)](https://github.com/whiskey777/WinDiskMap/releases/latest) ![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11%2FServer-0078D6?style=flat&labelColor=24292e)
 
 Консольный анализатор занятого места на диске для Windows. Отображает дерево каталогов в терминале, подсчитывает размеры файлов и папок, экспортирует результаты в CSV и поддерживает удалённое сканирование по WinRM.
 
