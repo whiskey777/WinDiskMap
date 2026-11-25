@@ -28,23 +28,21 @@ namespace WinDiskMap.Tui
 
         private static string ReadVersion()
         {
-            try
+            // Чтение атрибута собственной сборки не требует catch: при отсутствии
+            // InformationalVersion fallback — четырехчисловая версия из AssemblyName.
+            var asm = typeof(TuiApp).Assembly;
+            var attrs = asm.GetCustomAttributes(typeof(AssemblyInformationalVersionAttribute), false);
+            if (attrs.Length > 0)
             {
-                var asm = typeof(TuiApp).Assembly;
-                var attr = (AssemblyInformationalVersionAttribute)Attribute.GetCustomAttribute(
-                    asm, typeof(AssemblyInformationalVersionAttribute));
-                string v = attr != null ? attr.InformationalVersion : null;
+                var v = ((AssemblyInformationalVersionAttribute)attrs[0]).InformationalVersion;
                 if (!string.IsNullOrWhiteSpace(v))
                 {
                     int plus = v.IndexOf('+');
                     return plus > 0 ? v.Substring(0, plus) : v;
                 }
-                return asm.GetName().Version.ToString();
             }
-            catch
-            {
-                return "";
-            }
+            var version = asm.GetName().Version;
+            return version != null ? version.ToString() : "";
         }
 
         // Цвета берутся из активной темы; при переключении T достаточно одного
