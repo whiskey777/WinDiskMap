@@ -84,11 +84,28 @@ namespace WinDiskMap.Core.Remote
                     proc.Start();
                     proc.BeginErrorReadLine();
 
-                    // Строки агента приходят с префиксом OUT\t; остальное — служебное.
+                    // PowerShell отдаёт чанки CH\t<base64>\t<pos>; декодирование UTF-8
+                    // и разбивку на строки делает C# — в PS это было в ~15 раз медленнее.
+                    var decoder = new NdJsonChunkDecoder();
+                    long transferred = 0;
+                    int chunks = 0;
+                    var sw = Stopwatch.StartNew();
                     string line;
                     while ((line = proc.StandardOutput.ReadLine()) != null)
                     {
-                        if (line.StartsWith("OUT\t", StringComparison.Ordinal))
+                        if (line.StartsWith("CH\t", StringComparison.Ordinal))
+                        {
+                            string rest = line.Substring(3);
+                            int tab = rest.IndexOf('\t');
+                            if (tab < 0) continue;
+                            string b64 = rest.Substring(0, tab);
+                            long pos;
+                            if (long.TryParse(rest.Substring(tab + 1), out pos))
+                                transferred = Math.Max(transferred, pos);
+                            chunks++;
+                            decoder.Feed(b64, onLine);
+                        }
+                        else if (line.StartsWith("OUT\t", StringComparison.Ordinal))
                         {
                             onLine(line.Substring(4));
                         }
@@ -99,7 +116,16 @@ namespace WinDiskMap.Core.Remote
                                                   + line.Substring(4));
                         }
                     }
+                    decoder.Flush(onLine);
                     proc.WaitForExit();
+
+                    if (chunks > 0)
+                    {
+                        double sec = Math.Max(sw.Elapsed.TotalSeconds, 0.001);
+                        AppLog.Write("INFO", "remote NDJSON: " + transferred.ToString("N0")
+                            + " bytes in " + chunks + " chunks, " + sec.ToString("F2")
+                            + " s, " + (transferred / sec / 1048576.0).ToString("F1") + " MB/s");
+                    }
 
                     if (proc.ExitCode != 0)
                     {
@@ -197,15 +223,12 @@ namespace WinDiskMap.Core.Remote
               .Append("} -ArgumentList $remoteExe, $remoteOut, $remoteErr, $remoteRc, ")
               .Append(QuotePs(agentArgs)).Append(" -AsJob;");
 
-            // 4. Читаем stdout-файл порциями через вторую сессию. Порция ограничена
-            //    256 КБ: иначе один Invoke-Command может вернуть десятки мегабайт
-            //    и застрять на base64/десериализации, а TUI получит данные рывками.
-            //    Декодер с состоянием сохраняет multibyte-имена, разорванные
-            //    на границе порций; строки извлекаются без ToString() всего буфера
-            //    на каждую строку (было O(n^2) на большой пачке NDJSON).
+            // 4. Читаем stdout-файл порциями до 2 МБ через вторую сессию. PowerShell
+            //    только кодирует чанк в base64 и печатает CH\t<b64>\t<pos>; декодирование
+            //    UTF-8 и разбивку на строки делает C#-хост (в PS это стоило ~87 с на
+            //    78 МБ NDJSON). Sleep только на пустом чанке: при ~14 МБ/с почти все
+            //    опросы возвращают данные, и засыпать после них не нужно.
             sb.Append("$pos = 0;");
-            sb.Append("$pending = '';");
-            sb.Append("$decoder = [Text.Encoding]::UTF8.GetDecoder();");
             sb.Append("while ($true) {");
             sb.Append("  $chunk = Invoke-Command -Session $poll -ScriptBlock {");
             sb.Append("      param($f, $p)");
@@ -213,7 +236,7 @@ namespace WinDiskMap.Core.Remote
             sb.Append("      $fs = [IO.File]::Open($f,'Open','Read','ReadWrite');");
             sb.Append("      try { if ($fs.Length -le $p) { return ,@('','',$p) }");
             sb.Append("            $fs.Position = $p;");
-            sb.Append("            $len = [int][Math]::Min(($fs.Length - $p), 262144);");
+            sb.Append("            $len = [int][Math]::Min(($fs.Length - $p), 2097152);");
             sb.Append("            $buf = New-Object byte[] $len;");
             sb.Append("            $n2 = $fs.Read($buf,0,$len);");
             sb.Append("            if ($n2 -le 0) { return ,@('','',$p) }");
@@ -222,30 +245,21 @@ namespace WinDiskMap.Core.Remote
             sb.Append("  } -ArgumentList $remoteOut, $pos;");
             sb.Append("  if ($null -eq $chunk) { Start-Sleep -Milliseconds 100; if ($job.State -ne 'Running') { break } continue }");
             sb.Append("  $b64 = $chunk[0];");
+            sb.Append("  $got = $false;");
             sb.Append("  if ($b64 -and $b64.Length -gt 0) {");
             sb.Append("      try {");
-            sb.Append("          $bytes = [Convert]::FromBase64String([string]$b64);");
-            sb.Append("          $count = $decoder.GetCharCount($bytes, 0, $bytes.Length, $false);");
-            sb.Append("          if ($count -gt 0) {");
-            sb.Append("            $chars = New-Object char[] $count;");
-            sb.Append("            $got = $decoder.GetChars($bytes, 0, $bytes.Length, $chars, 0, $false);");
-            sb.Append("            if ($got -gt 0) { $pending += (-join $chars[0..($got-1)]) }");
-            sb.Append("          }");
-            sb.Append("          while (($i = $pending.IndexOf([char]10)) -ge 0) {");
-            sb.Append("            $ln = $pending.Substring(0, $i).TrimEnd([char]13);");
-            sb.Append("            $pending = $pending.Substring($i + 1);");
-            sb.Append("            if ($ln) { Write-Output ('OUT' + [char]9 + $ln) }");
-            sb.Append("          }");
+            sb.Append("          Write-Output ('CH' + [char]9 + [string]$b64 + [char]9 + [string]$chunk[1]);");
+            sb.Append("          $got = $true;");
             sb.Append("      } catch {}");
             sb.Append("  }");
-            sb.Append("  try { $pos = [int]([string]$chunk[1]) } catch { $pos = $pos }");
+            sb.Append("  try { $pos = [long]([string]$chunk[1]) } catch { $pos = $pos }");
             sb.Append("  if ($job.State -ne 'Running') { break }");
-            sb.Append("  Start-Sleep -Milliseconds 25;");
+            sb.Append("  if (-not $got) { Start-Sleep -Milliseconds 25 }");
             sb.Append("}");
 
             // 5. Дожидаемся задачи и вычитываем хвост: агент мог дописать данные
-            //    между последним опросом и выходом. Потеря последней строки
-            //    означала бы неполное дерево без всякой ошибки.
+            //    между последним опросом и выходом. Потеря последнего чанка означала
+            //    бы неполное дерево без всякой ошибки. C# сам соберёт хвост строк.
             sb.Append("try { Wait-Job $job | Out-Null } catch {}");
             sb.Append("while ($true) {");
             sb.Append("  $chunk = Invoke-Command -Session $poll -ScriptBlock {");
@@ -254,7 +268,7 @@ namespace WinDiskMap.Core.Remote
             sb.Append("      $fs = [IO.File]::Open($f,'Open','Read','ReadWrite');");
             sb.Append("      try { if ($fs.Length -le $p) { return ,@('','',$p) }");
             sb.Append("            $fs.Position = $p;");
-            sb.Append("            $len = [int][Math]::Min(($fs.Length - $p), 262144);");
+            sb.Append("            $len = [int][Math]::Min(($fs.Length - $p), 2097152);");
             sb.Append("            $buf = New-Object byte[] $len;");
             sb.Append("            $n2 = $fs.Read($buf,0,$len);");
             sb.Append("            if ($n2 -le 0) { return ,@('','',$p) }");
@@ -264,23 +278,9 @@ namespace WinDiskMap.Core.Remote
             sb.Append("  if ($null -eq $chunk) { break }");
             sb.Append("  $b64 = $chunk[0];");
             sb.Append("  if (-not $b64 -or $b64.Length -eq 0) { break }");
-            sb.Append("  try {");
-            sb.Append("    $bytes = [Convert]::FromBase64String([string]$b64);");
-            sb.Append("    $count = $decoder.GetCharCount($bytes, 0, $bytes.Length, $false);");
-            sb.Append("    if ($count -gt 0) {");
-            sb.Append("      $chars = New-Object char[] $count;");
-            sb.Append("      $got = $decoder.GetChars($bytes, 0, $bytes.Length, $chars, 0, $false);");
-            sb.Append("      if ($got -gt 0) { $pending += (-join $chars[0..($got-1)]) }");
-            sb.Append("    }");
-            sb.Append("    while (($i = $pending.IndexOf([char]10)) -ge 0) {");
-            sb.Append("      $ln = $pending.Substring(0, $i).TrimEnd([char]13);");
-            sb.Append("      $pending = $pending.Substring($i + 1);");
-            sb.Append("      if ($ln) { Write-Output ('OUT' + [char]9 + $ln) }");
-            sb.Append("    }");
-            sb.Append("    try { $pos = [int]([string]$chunk[1]) } catch {}");
-            sb.Append("  } catch { break }");
+            sb.Append("  Write-Output ('CH' + [char]9 + [string]$b64 + [char]9 + [string]$chunk[1]);");
+            sb.Append("  try { $pos = [long]([string]$chunk[1]) } catch {}");
             sb.Append("}");
-            sb.Append("if ($pending.Length -gt 0) { $ln = $pending.TrimEnd([char]13,[char]10); if ($ln) { Write-Output ('OUT' + [char]9 + $ln) } }");
             sb.Append("$rcText = '';");
             sb.Append("try { $rcText = [string](Invoke-Command -Session $poll -ScriptBlock { param($f) if (Test-Path $f) { [IO.File]::ReadAllText($f) } else { '' } } -ArgumentList $remoteRc) } catch {}");
             sb.Append("$rc = 0;");
@@ -380,6 +380,57 @@ namespace WinDiskMap.Core.Remote
         private static string EscapeBlock(string s)
         {
             return s; // блок передаётся как есть; кавычки внутри уже экранированы
+        }
+    }
+
+    /// <summary>
+    /// Декодирует base64-чанки NDJSON, пришедшие от PowerShell, и отдаёт полные строки.
+    /// Состояние Decoder сохраняется между чанками, поэтому многобайтовые имена,
+    /// разрезанные на границе, восстанавливаются правильно.
+    /// </summary>
+    internal sealed class NdJsonChunkDecoder
+    {
+        private readonly Decoder _decoder = Encoding.UTF8.GetDecoder();
+        private readonly StringBuilder _pending = new StringBuilder();
+
+        public void Feed(string base64, Action<string> emit)
+        {
+            if (string.IsNullOrEmpty(base64)) return;
+            byte[] bytes = Convert.FromBase64String(base64);
+            int count = _decoder.GetCharCount(bytes, 0, bytes.Length, false);
+            if (count > 0)
+            {
+                var chars = new char[count];
+                int got = _decoder.GetChars(bytes, 0, bytes.Length, chars, 0, false);
+                _pending.Append(chars, 0, got);
+            }
+            Drain(emit);
+        }
+
+        /// <summary>Отдаёт последнюю строку без завершающего перевода строки.</summary>
+        public void Flush(Action<string> emit)
+        {
+            if (_pending.Length == 0) return;
+            string last = _pending.ToString().TrimEnd('\r', '\n');
+            _pending.Length = 0;
+            if (last.Length > 0) emit(last);
+        }
+
+        private void Drain(Action<string> emit)
+        {
+            if (_pending.Length == 0) return;
+            string text = _pending.ToString();
+            _pending.Length = 0;
+
+            int start = 0;
+            int newline;
+            while ((newline = text.IndexOf('\n', start)) >= 0)
+            {
+                int end = newline > start && text[newline - 1] == '\r' ? newline - 1 : newline;
+                if (end > start) emit(text.Substring(start, end - start));
+                start = newline + 1;
+            }
+            if (start < text.Length) _pending.Append(text, start, text.Length - start);
         }
     }
 }
