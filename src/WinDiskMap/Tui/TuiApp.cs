@@ -21,7 +21,7 @@ namespace WinDiskMap.Tui
     /// </summary>
     internal sealed class TuiApp
     {
-        /// <summary>Версия билда из InformationalVersion (Example: 1.0.0-beta.3).</summary>
+        /// <summary>Версия билда из InformationalVersion (Example: 1.0.0).</summary>
         private static readonly string VersionLabel = ReadVersion();
         private static readonly string VersionLabelTitle =
             VersionLabel.Length > 0 ? " " + VersionLabel : "";

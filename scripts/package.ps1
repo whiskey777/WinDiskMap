@@ -41,7 +41,7 @@ WinDiskMap $Version — portable ($variant)
 Требования: Windows 10/11/Server, консоль с поддержкой ANSI/VT (Windows Terminal
 или modern conhost). MFT-режим требует администратора и локального NTFS;
 без админа работает обход каталогов (--no-mft). Удалённый скан по WinRM работает,
-но медленно; проверьте настройку хоста по docs/REMOTE-SETUP.md.
+поток NDJSON передаётся чанками до 2 МБ и декодируется локально. Настройка хоста — docs/REMOTE-SETUP.md.
 
 ВНИМАНИЕ ДЛЯ КОРПОРАТИВНОЙ СРЕДЫ:
 - Если WinDiskMap.exe подписан (сборка из Releases), проверьте вкладку

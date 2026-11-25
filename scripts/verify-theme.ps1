@@ -56,7 +56,7 @@ try {
         Select-Object -First 1).ConstructorArguments[0].Value
     $info = ($info -split '\+')[0]
     Assert-True ($label -eq $info) "версия в шапке TUI: $label"
-    Assert-True ($label -match '^1\.0\.0-beta\.\d+$') 'версия сборки — ожидаемый beta-формат'
+    Assert-True ($label -match '^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$') 'версия сборки — корректный SemVer'
 
     # Палитра не должна зависеть от схемы терминала: никаких индексированных
     # 256-цветов и базовых 16 кодов, только явный RGB.

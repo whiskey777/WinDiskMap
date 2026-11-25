@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Существующий тег, например v1.0.0-beta.3'
+        description: 'Существующий тег, например v1.0.0'
         required: true
         type: string
 
@@ -122,13 +122,18 @@ jobs:
           } else {
             'отсутствует — см. раздел «Code signing policy» в README'
           }
+          $status = if ($env:VERSION -match '-') {
+            '**pre-release**. Версия содержит суффикс, автоматической публикации как стабильной не выполняется.'
+          } else {
+            '**стабильный релиз**. Статус beta снят: WinRM проверен на реальном удалённом хосте, поток NDJSON оптимизирован.'
+          }
           $notes = @"
           ## WinDiskMap $env:VERSION
 
           Готовые архивы собраны GitHub Actions из коммита $env:GITHUB_SHA — распакуйте и запускайте, компиляция не нужна.
 
-          - Статус: **beta**. WinRM проверен на реальном удалённом хосте и работает, но медленно;
-            возможна дополнительная настройка хоста (см. docs/REMOTE-SETUP.md).
+          - Статус: $status
+          - Удалённый скан требует настроенного WinRM на хосте (см. docs/REMOTE-SETUP.md).
           - Подпись: $signing
           - Хэши ZIP-архивов: `RELEASE_SHA256SUMS.txt`; внутри каждого архива есть `SHA256SUMS.txt`.
 
@@ -136,13 +141,15 @@ jobs:
           "@
           [IO.File]::WriteAllText((Join-Path $env:GITHUB_WORKSPACE 'RELEASE_NOTES.md'), $notes, [Text.UTF8Encoding]::new($false))
 
-      - name: Publish GitHub Release (pre-release)
+      - name: Publish GitHub Release
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_PATHS: ${{ steps.stage.outputs.paths }}
         run: |
           $files = $env:RELEASE_PATHS -split '\|' | Where-Object { $_ }
-          $ghArgs = @('release', 'create', $env:TAG, '--prerelease', '--title', "WinDiskMap $env:VERSION", '--notes-file', 'RELEASE_NOTES.md') + $files
+          $ghArgs = @('release', 'create', $env:TAG, '--title', "WinDiskMap $env:VERSION", '--notes-file', 'RELEASE_NOTES.md')
+          if ($env:VERSION -match '-') { $ghArgs += '--prerelease' }
+          $ghArgs += $files
           & gh @ghArgs
           if ($LASTEXITCODE -ne 0) { throw 'gh release create failed' }
