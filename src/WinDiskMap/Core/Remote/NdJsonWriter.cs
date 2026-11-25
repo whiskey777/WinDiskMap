@@ -5,14 +5,17 @@ using System.Text;
 namespace WinDiskMap.Core.Remote
 {
     /// <summary>
-    /// Поток записей NDJSON в stdout агента. Каждая запись — отдельная строка,
-    /// сбрасывается сразу (хост читает поток живьём, счётчики растут по мере скана).
-    /// Вывод строго UTF-8 без BOM: хост декодирует его как UTF-8.
+    /// Поток записей NDJSON в stdout агента. Каждая запись — отдельная строка; записи
+    /// буферизуются пачками примерно по 64 КБ и сбрасываются вместе. При скорости
+    /// агента ~14 МБ/с задержка на пачку &lt;5 мс, зато исчезают сотни тысяч Flush().
+    /// End() и Error() сбрасывают буфер сразу. Вывод строго UTF-8 без BOM.
     /// </summary>
     internal sealed class NdJsonWriter
     {
+        private const int BatchChars = 1 << 16;
         private readonly StreamWriter _out;
         private readonly StringBuilder _sb = new StringBuilder(256);
+        private readonly StringBuilder _batch = new StringBuilder(BatchChars + 4096);
 
         public NdJsonWriter(Stream stream)
         {
@@ -92,6 +95,7 @@ namespace WinDiskMap.Core.Remote
                .Append(",\"bytes\":").Append(bytes)
                .Append('}');
             Line();
+            Flush();
         }
 
         public void Error(string message)
@@ -101,16 +105,24 @@ namespace WinDiskMap.Core.Remote
             NdJson.WriteString(_sb, message);
             _sb.Append('}');
             Line();
+            Flush();
         }
 
-        /// <summary>Дозапись строки и сброс буфера: хост видит данные без задержки.</summary>
+        /// <summary>Дозапись строки в пачку; настоящий Flush — по порогу или явно.</summary>
         private void Line()
         {
-            _out.Write(_sb.ToString());
-            _out.Write('\n');
-            _out.Flush();
+            _batch.Append(_sb).Append('\n');
+            if (_batch.Length >= BatchChars) Flush();
         }
 
-        public void Flush() { _out.Flush(); }
+        public void Flush()
+        {
+            if (_batch.Length > 0)
+            {
+                _out.Write(_batch.ToString());
+                _batch.Length = 0;
+            }
+            _out.Flush();
+        }
     }
 }
