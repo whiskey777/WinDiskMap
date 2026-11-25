@@ -40,7 +40,8 @@ WinDiskMap $Version — portable ($variant)
 
 Требования: Windows 10/11/Server, консоль с поддержкой ANSI/VT (Windows Terminal
 или modern conhost). MFT-режим требует администратора и локального NTFS;
-без админа работает обход каталогов (--no-mft).
+без админа работает обход каталогов (--no-mft). Удалённый скан по WinRM работает,
+но медленно; проверьте настройку хоста по docs/REMOTE-SETUP.md.
 
 ВНИМАНИЕ ДЛЯ КОРПОРАТИВНОЙ СРЕДЫ:
 - Если WinDiskMap.exe подписан (сборка из Releases), проверьте вкладку
@@ -65,7 +66,12 @@ function Complete-Package([string]$stage, [string]$zip) {
     }
     Write-Utf8Bom (Join-Path $stage 'SHA256SUMS.txt') (($sums -join "`r`n") + "`r`n")
     if (Test-Path $zip) { Remove-Item $zip -Force }
-    Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $zip -CompressionLevel Optimal
+    # Compress-Archive требует загрузки модуля Microsoft.PowerShell.Archive, который
+    # блокируется локальной политикой подписи скриптов. ZipFile из .NET работает без
+    # дополнительных модулей и даёт те же плоские архивы с UTF-8-именами файлов.
+    Add-Type -AssemblyName System.IO.Compression.FileSystem -ErrorAction SilentlyContinue
+    [IO.Compression.ZipFile]::CreateFromDirectory(
+        $stage, $zip, [IO.Compression.CompressionLevel]::Optimal, $false)
     "OK  $zip  $((Get-Item $zip).Length) bytes"
 }
 

@@ -56,8 +56,9 @@ namespace WinDiskMap.Tui
     /// <summary>
     /// Темы TUI и сохранение выбора между запусками. Порядок в цикле:
     /// Modern Dark (по умолчанию) → Norton/FAR → классическая тема beta.1.
-    /// Все палитры используют 24-битный RGB и собственный фон: результат одинаков
-    /// в Windows Terminal, классическом conhost и встроенном терминале VS Code.
+    /// Все палитры используют 24-битный RGB и собственный фон. В старом conhost
+    /// (Windows Server 2016, build 14393) 24-битные последовательности не
+    /// поддерживаются — там используется запасной набор из базовых 16 цветов.
     /// </summary>
     internal static class Theme
     {
@@ -119,11 +120,71 @@ namespace WinDiskMap.Tui
                 key: "\x1b[1;38;2;255;255;85m")
         };
 
+        /// <summary>
+        /// Те же три темы в базовых 16 цветах. Нужен старом conhost до build 14931
+        /// (включая Windows Server 2016 14393): он не понимает 38;2/48;2 и
+        /// подставляет свои цвета, из-за чего папки становятся «очень синими»,
+        /// а акцент клавиш в подсказках совпадает с обычным текстом.
+        /// </summary>
+        public static readonly Palette[] Legacy =
+        {
+            new Palette(
+                id: "modern-dark",
+                nameRu: "Modern Dark",
+                nameEn: "Modern Dark",
+                reset: "\x1b[0m\x1b[37m\x1b[40m",
+                dim: "\x1b[90m",
+                header: "\x1b[46m\x1b[30m",
+                // В старом conhost 94 («bright blue») на тёмном фоне выглядит
+                // почти чёрным и сливается с шапкой. Белый жирный сохраняет
+                // контраст и на чёрном фоне, и на подсвеченной строке.
+                folder: "\x1b[1;97m",
+                file: "\x1b[37m",
+                temp: "\x1b[1;33m",
+                dump: "\x1b[95m",
+                warn: "\x1b[1;31m\x1b[41m",
+                sortActive: "\x1b[1;46m\x1b[30m",
+                key: "\x1b[1;33m"),
+
+            new Palette(
+                id: "nc-far",
+                nameRu: "Нортон / FAR",
+                nameEn: "Norton / FAR",
+                reset: "\x1b[0m\x1b[37m\x1b[44m",
+                dim: "\x1b[37m",
+                header: "\x1b[1;44m\x1b[97m",
+                folder: "\x1b[1;33m",
+                file: "\x1b[37m",
+                temp: "\x1b[96m",
+                dump: "\x1b[95m",
+                warn: "\x1b[1;41m\x1b[97m",
+                sortActive: "\x1b[1;44m\x1b[93m",
+                key: "\x1b[1;93m"),
+
+            new Palette(
+                id: "classic",
+                nameRu: "Классика WinDiskMap",
+                nameEn: "WinDiskMap classic",
+                reset: "\x1b[0m\x1b[37m\x1b[40m",
+                dim: "\x1b[90m",
+                header: "\x1b[30m\x1b[47m",
+                folder: "\x1b[1;36m",
+                file: "\x1b[37m",
+                temp: "\x1b[33m",
+                dump: "\x1b[35m",
+                warn: "\x1b[1;31m",
+                sortActive: "\x1b[30m\x1b[43m",
+                key: "\x1b[1;93m")
+        };
+
+        /// <summary>true — 24-битный RGB, false — запасные 16 цветов.</summary>
+        public static bool TrueColor { get; private set; }
+
         public static int Index { get; private set; }
 
         public static Palette Current
         {
-            get { return All[Index]; }
+            get { return (TrueColor ? All : Legacy)[Index]; }
         }
 
         private static string SettingsPath
@@ -149,6 +210,7 @@ namespace WinDiskMap.Tui
         /// <summary>Читает сохранённую тему; неизвестное значение — тема по умолчанию.</summary>
         public static void Init()
         {
+            TrueColor = DetectTrueColor();
             Index = 0; // здоровое состояние при любом исходе чтения файла
             string path = SettingsPath;
             if (path == null) return;
@@ -174,6 +236,28 @@ namespace WinDiskMap.Tui
             catch (NotSupportedException ex) { Note("read", ex); }
             catch (SecurityException ex) { Note("read", ex); }
             // Нет прав, битый файл — продолжаем с темой по умолчанию.
+        }
+
+        /// <summary>
+        /// Старый conhost не понимает 38;2/48;2 до build 14931. Windows Terminal,
+        /// VS Code и сторонние терминалы ставят свои env-переменные и умеют
+        /// true color независимо от build ОС.
+        /// </summary>
+        private static bool DetectTrueColor()
+        {
+            if (Environment.GetEnvironmentVariable("WINDISKMAP_NO_TRUECOLOR") == "1")
+                return false;
+            if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("WT_SESSION")))
+                return true;
+            if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("TERM_PROGRAM")))
+                return true;
+            string colorTerm = Environment.GetEnvironmentVariable("COLORTERM");
+            if (!string.IsNullOrEmpty(colorTerm)
+                && (colorTerm.IndexOf("truecolor", StringComparison.OrdinalIgnoreCase) >= 0
+                    || colorTerm.IndexOf("24bit", StringComparison.OrdinalIgnoreCase) >= 0))
+                return true;
+            if (Environment.OSVersion.Platform != PlatformID.Win32NT) return true;
+            return Environment.OSVersion.Version.Build >= 14931;
         }
 
         public static Palette Cycle()

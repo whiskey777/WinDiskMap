@@ -101,10 +101,12 @@
    строка с кавычками и Unicode не пережила бы `ProcessStartInfo.Arguments`.
 2. Запуск `powershell.exe`/`pwsh` локально: `-NoProfile -NonInteractive -ExecutionPolicy
    Bypass -InputFormat None -OutputFormat Text -File <script>`, вывод декодируется как UTF-8.
-3. Скрипт: `New-PSSession` → `Copy-Item -ToSession net48\WinDiskMap.exe` в `%TEMP%` хоста →
-   `Invoke-Command` запускает агента с перенаправлением stdout в файл → локальный цикл читает
-   файл порциями, декодирует base64/UTF-8 и печатает строки с префиксом `OUT\t` (ошибки —
-   `ERR\t`) → удаление файлов и `Remove-PSSession`.
+3. Скрипт: две `New-PSSession` (одна под агента, вторая под чтение) → `Copy-Item -ToSession
+   net48\WinDiskMap.exe` в `%TEMP%` хоста → `Invoke-Command -AsJob` запускает агента с
+   перенаправлением stdout в файл → вторая сессия читает файл порциями до 256 КБ, lokalный
+   локальный декодер UTF-8 с состоянием собирает строки и печатает их с префиксом `OUT\t` (ошибки —
+   `ERR\t`). После завершения агента хвост файла вычитывается повторно, чтобы не потерять
+   последние записи, затем файлы удаляются и обе сессии закрываются.
 4. Хост-процесс (`WinDiskMap`) читает `OUT\t`-строки и вызывает `onLine` → `RemoteScanRunner`.
 
 Почему файл, а не прямой stdout `Invoke-Command`: PowerShell десериализует вывод и

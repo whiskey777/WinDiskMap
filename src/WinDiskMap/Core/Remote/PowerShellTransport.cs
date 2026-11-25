@@ -11,11 +11,13 @@ namespace WinDiskMap.Core.Remote
     /// Транспорт удалённого скана через PowerShell Remoting (WinRM/WSMan).
     ///
     /// Схема (без установки чего-либо на удалённый хост):
-    ///   1. New-PSSession host  — сессия WSMan;
+    ///   1. Две New-PSSession на host: одна под агента, вторая под чтение файла
+    ///      (одновременно одна сессия не может выполнять два Invoke-Command —
+    ///      вторая задача получает "session availability is Busy");
     ///   2. Copy-Item -ToSession — копирование того же exe (net48) в temp хоста;
-    ///   3. Invoke-Command — запуск exe в режиме --agent, stdout в файл на хосте;
-    ///   4. хост читает файл по сессии порциями (UTF-8), пока агент пишет, — живьём;
-    ///   5. очистка: удаление exe и файла, закрытие сессии.
+    ///   3. Invoke-Command -AsJob — запуск exe в режиме --agent, stdout в файл;
+    ///   4. через вторую сессию файл читается порциями (UTF-8), пока агент пишет;
+    ///   5. очистка: удаление exe и файла, закрытие обеих сессий.
     ///
     /// Почему через файл, а не через stdout сессии: Invoke-Command возвращает
     /// десериализованные строки, которые PowerShell перекодирует по кодовой странице
@@ -118,11 +120,13 @@ namespace WinDiskMap.Core.Remote
 
         /// <summary>
         /// PowerShell-скрипт, целиком выполняющийся на локальной машине: он создаёт
-        /// сессию к удалённому хосту, копирует exe, запускает агента и читает его
-        /// stdout-файл построчно, печатая строки с префиксом OUT\t.
+        /// две сессии к удалённому хосту, копирует exe, запускает агента и читает его
+        /// stdout-файл построчно через вторую сессию, печатая строки с префиксом OUT\t.
         ///
-        /// Пути на удалённом хосте формируются из имени файла и $env:TEMP — «%TEMP%»
-        /// не раскрывается в параметрах Start-Process/Copy-Item.
+        /// TEMP удалённого хоста запрашивается у него же и передаётся явными
+        /// путями во все удалённые блоки: локальный $env:TEMP может отличаться
+        /// (другой профиль / короткое имя), а «%TEMP%» не раскрывается в
+        /// параметрах Start-Process/Copy-Item.
         /// Все ошибки конвертируются в одну строку ERR\t&lt;текст&gt;: хост покажет её
         /// пользователю вместо простыни PowerShell.
         /// </summary>
@@ -139,86 +143,167 @@ namespace WinDiskMap.Core.Remote
                 sessionParams += " -Credential $cred";
             }
 
-            string agentArgs = "--agent --path " + QuotePs(remoteTarget) + (noMft ? " --no-mft" : "");
+            // CommandLine для CreateProcess: кавычки только двойные, одиночные
+            // не являются разделителями и попали бы в путь как символы.
+            string agentArgs = "--agent --path " + QuoteWinArg(remoteTarget)
+                               + (noMft ? " --no-mft" : "");
 
-            // Удалённый скрипт: запустить агент, дождаться конца, отдать код.
+            // Удалённый скрипт: запустить агента, дождаться конца и записать код
+            // в отдельный файл. `exit` внутри -AsJob не возвращает код надёжно,
+            // поэтому код читается через вторую сессию. stderr агента тоже
+            // сохраняется: без него ошибка видна только как "exit code 2".
             string remoteScript =
+                "param($exe, $out, $err, $rcfile, $agentArgs) " +
                 "$ErrorActionPreference='Stop'; " +
-                "$out = Join-Path $env:TEMP '" + EscapeSingle(remoteOut) + "'; " +
                 "if (Test-Path $out) { Remove-Item $out -Force }; " +
-                "$exe = Join-Path $env:TEMP '" + EscapeSingle(remoteExeName) + "'; " +
+                "if (Test-Path $err) { Remove-Item $err -Force }; " +
+                "if (Test-Path $rcfile) { Remove-Item $rcfile -Force }; " +
                 "$p = Start-Process -FilePath $exe " +
-                "-ArgumentList " + QuotePs(agentArgs) + " " +
-                "-RedirectStandardOutput $out -NoNewWindow -PassThru; " +
+                "-ArgumentList $agentArgs " +
+                // -NoNewWindow в неинтерактивной сессии WinRM даёт
+                // "Access is denied": не к какому консольному окну присоединиться.
+                // При RedirectStandardOutput PowerShell не использует ShellExecute.
+                "-RedirectStandardOutput $out -RedirectStandardError $err " +
+                "-PassThru; " +
                 "$p.WaitForExit(); " +
-                "exit $p.ExitCode";
+                "[IO.File]::WriteAllText($rcfile, [string]$p.ExitCode)";
 
             var sb = new StringBuilder();
             sb.Append("$ErrorActionPreference='Stop';");
             sb.Append("try {");
             if (credSetup.Length > 0) sb.Append(credSetup);
 
-            // 1. Сессия.
+            // 1. Две сессии: $s занята фоновой задачей агента, $poll читает её
+            //    stdout-файл. Повторный Invoke-Command в занятую сессию даёт
+            //    "session availability is Busy".
             sb.Append("$s = New-PSSession ").Append(sessionParams).Append(";");
+            sb.Append("$poll = New-PSSession ").Append(sessionParams).Append(";");
 
-            // 2. Копирование агента в temp удалённого хоста (путь вычисляет он сам).
+            // 2. TEMP удалённого хоста узнаём у него же. `$env:TEMP` в Copy-Item
+            //    раскрылся бы локально и ушёл на хост как чужой путь.
+            sb.Append("$remoteTemp = Invoke-Command -Session $s -ScriptBlock { $env:TEMP };");
+            sb.Append("if (-not $remoteTemp) { throw 'Remote TEMP is empty' };");
+            sb.Append("Invoke-Command -Session $s -ScriptBlock { param($d) if (-not (Test-Path $d)) { New-Item -ItemType Directory -Path $d -Force | Out-Null } } -ArgumentList $remoteTemp;");
+            sb.Append("$remoteExe = Join-Path $remoteTemp '").Append(EscapeSingle(remoteExeName)).Append("';");
+            sb.Append("$remoteOut = Join-Path $remoteTemp '").Append(EscapeSingle(remoteOut)).Append("';");
+            sb.Append("$remoteErr = Join-Path $remoteTemp '").Append(EscapeSingle(remoteOut + ".err")).Append("';");
+            sb.Append("$remoteRc = Join-Path $remoteTemp '").Append(EscapeSingle(remoteOut + ".rc")).Append("';");
+
+            // 3. Копирование агента и запуск в фоне на удалённом хосте.
             sb.Append("$localExe = '").Append(EscapeSingle(LocalExePath())).Append("';");
-            sb.Append("Copy-Item -Path $localExe -Destination (Join-Path $env:TEMP '")
-              .Append(EscapeSingle(remoteExeName))
-              .Append("') -ToSession $s -Force;");
-
-            // 3. Запуск агента в фоне на удалённом хосте (ждём код отдельной задачей).
+            sb.Append("Copy-Item -Path $localExe -Destination $remoteExe -ToSession $s -Force;");
             sb.Append("$job = Invoke-Command -Session $s -ScriptBlock {")
               .Append(remoteScript)
-              .Append("} -AsJob;");
+              .Append("} -ArgumentList $remoteExe, $remoteOut, $remoteErr, $remoteRc, ")
+              .Append(QuotePs(agentArgs)).Append(" -AsJob;");
 
-            // 4. Читаем stdout-файл построчно по сессии, пока задача работает.
-            sb.Append("$outName = '").Append(EscapeSingle(remoteOut)).Append("';");
+            // 4. Читаем stdout-файл порциями через вторую сессию. Порция ограничена
+            //    256 КБ: иначе один Invoke-Command может вернуть десятки мегабайт
+            //    и застрять на base64/десериализации, а TUI получит данные рывками.
+            //    Декодер с состоянием сохраняет multibyte-имена, разорванные
+            //    на границе порций; строки извлекаются без ToString() всего буфера
+            //    на каждую строку (было O(n^2) на большой пачке NDJSON).
             sb.Append("$pos = 0;");
-            sb.Append("$sb = New-Object System.Text.StringBuilder;");
+            sb.Append("$pending = '';");
+            sb.Append("$decoder = [Text.Encoding]::UTF8.GetDecoder();");
             sb.Append("while ($true) {");
-            sb.Append("  $chunk = Invoke-Command -Session $s -ScriptBlock {");
-            sb.Append("      param($n, $p) $f = Join-Path $env:TEMP $n;");
+            sb.Append("  $chunk = Invoke-Command -Session $poll -ScriptBlock {");
+            sb.Append("      param($f, $p)");
             sb.Append("      if (-not (Test-Path $f)) { return ,@('','',$p) }");
             sb.Append("      $fs = [IO.File]::Open($f,'Open','Read','ReadWrite');");
             sb.Append("      try { if ($fs.Length -le $p) { return ,@('','',$p) }");
             sb.Append("            $fs.Position = $p;");
-            sb.Append("            $len = [int]($fs.Length - $p);");
+            sb.Append("            $len = [int][Math]::Min(($fs.Length - $p), 262144);");
             sb.Append("            $buf = New-Object byte[] $len;");
             sb.Append("            $n2 = $fs.Read($buf,0,$len);");
             sb.Append("            if ($n2 -le 0) { return ,@('','',$p) }");
             sb.Append("            return ,@([Convert]::ToBase64String($buf,0,$n2), ($p+$n2).ToString())");
             sb.Append("      } finally { $fs.Dispose() }");
-            sb.Append("  } -ArgumentList $outName, $pos;");
-            sb.Append("  if ($null -eq $chunk) { Start-Sleep -Milliseconds 200; if ($job.State -ne 'Running') { break } continue }");
+            sb.Append("  } -ArgumentList $remoteOut, $pos;");
+            sb.Append("  if ($null -eq $chunk) { Start-Sleep -Milliseconds 100; if ($job.State -ne 'Running') { break } continue }");
             sb.Append("  $b64 = $chunk[0];");
             sb.Append("  if ($b64 -and $b64.Length -gt 0) {");
             sb.Append("      try {");
-            sb.Append("          $text = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String([string]$b64));");
-            sb.Append("          $sb.Append($text);");
-            sb.Append("          while (($i = $sb.ToString().IndexOf([char]10)) -ge 0) {");
-            sb.Append("              $ln = $sb.ToString(0, $i).TrimEnd([char]13);");
-            sb.Append("              $sb.Remove(0, $i+1);");
-            sb.Append("              if ($ln) { Write-Output ('OUT' + [char]9 + $ln) }");
+            sb.Append("          $bytes = [Convert]::FromBase64String([string]$b64);");
+            sb.Append("          $count = $decoder.GetCharCount($bytes, 0, $bytes.Length, $false);");
+            sb.Append("          if ($count -gt 0) {");
+            sb.Append("            $chars = New-Object char[] $count;");
+            sb.Append("            $got = $decoder.GetChars($bytes, 0, $bytes.Length, $chars, 0, $false);");
+            sb.Append("            if ($got -gt 0) { $pending += (-join $chars[0..($got-1)]) }");
+            sb.Append("          }");
+            sb.Append("          while (($i = $pending.IndexOf([char]10)) -ge 0) {");
+            sb.Append("            $ln = $pending.Substring(0, $i).TrimEnd([char]13);");
+            sb.Append("            $pending = $pending.Substring($i + 1);");
+            sb.Append("            if ($ln) { Write-Output ('OUT' + [char]9 + $ln) }");
             sb.Append("          }");
             sb.Append("      } catch {}");
             sb.Append("  }");
             sb.Append("  try { $pos = [int]([string]$chunk[1]) } catch { $pos = $pos }");
             sb.Append("  if ($job.State -ne 'Running') { break }");
-            sb.Append("  Start-Sleep -Milliseconds 120;");
+            sb.Append("  Start-Sleep -Milliseconds 25;");
             sb.Append("}");
 
-            // 5. Дожидаемся задачи, отдаём остаток буфера и код возврата.
+            // 5. Дожидаемся задачи и вычитываем хвост: агент мог дописать данные
+            //    между последним опросом и выходом. Потеря последней строки
+            //    означала бы неполное дерево без всякой ошибки.
             sb.Append("try { Wait-Job $job | Out-Null } catch {}");
+            sb.Append("while ($true) {");
+            sb.Append("  $chunk = Invoke-Command -Session $poll -ScriptBlock {");
+            sb.Append("      param($f, $p)");
+            sb.Append("      if (-not (Test-Path $f)) { return ,@('','',$p) }");
+            sb.Append("      $fs = [IO.File]::Open($f,'Open','Read','ReadWrite');");
+            sb.Append("      try { if ($fs.Length -le $p) { return ,@('','',$p) }");
+            sb.Append("            $fs.Position = $p;");
+            sb.Append("            $len = [int][Math]::Min(($fs.Length - $p), 262144);");
+            sb.Append("            $buf = New-Object byte[] $len;");
+            sb.Append("            $n2 = $fs.Read($buf,0,$len);");
+            sb.Append("            if ($n2 -le 0) { return ,@('','',$p) }");
+            sb.Append("            return ,@([Convert]::ToBase64String($buf,0,$n2), ($p+$n2).ToString())");
+            sb.Append("      } finally { $fs.Dispose() }");
+            sb.Append("  } -ArgumentList $remoteOut, $pos;");
+            sb.Append("  if ($null -eq $chunk) { break }");
+            sb.Append("  $b64 = $chunk[0];");
+            sb.Append("  if (-not $b64 -or $b64.Length -eq 0) { break }");
+            sb.Append("  try {");
+            sb.Append("    $bytes = [Convert]::FromBase64String([string]$b64);");
+            sb.Append("    $count = $decoder.GetCharCount($bytes, 0, $bytes.Length, $false);");
+            sb.Append("    if ($count -gt 0) {");
+            sb.Append("      $chars = New-Object char[] $count;");
+            sb.Append("      $got = $decoder.GetChars($bytes, 0, $bytes.Length, $chars, 0, $false);");
+            sb.Append("      if ($got -gt 0) { $pending += (-join $chars[0..($got-1)]) }");
+            sb.Append("    }");
+            sb.Append("    while (($i = $pending.IndexOf([char]10)) -ge 0) {");
+            sb.Append("      $ln = $pending.Substring(0, $i).TrimEnd([char]13);");
+            sb.Append("      $pending = $pending.Substring($i + 1);");
+            sb.Append("      if ($ln) { Write-Output ('OUT' + [char]9 + $ln) }");
+            sb.Append("    }");
+            sb.Append("    try { $pos = [int]([string]$chunk[1]) } catch {}");
+            sb.Append("  } catch { break }");
+            sb.Append("}");
+            sb.Append("if ($pending.Length -gt 0) { $ln = $pending.TrimEnd([char]13,[char]10); if ($ln) { Write-Output ('OUT' + [char]9 + $ln) } }");
+            sb.Append("$rcText = '';");
+            sb.Append("try { $rcText = [string](Invoke-Command -Session $poll -ScriptBlock { param($f) if (Test-Path $f) { [IO.File]::ReadAllText($f) } else { '' } } -ArgumentList $remoteRc) } catch {}");
             sb.Append("$rc = 0;");
-            sb.Append("try { $rc = (Receive-Job $job -ErrorAction Stop | Select-Object -Last 1) } catch { $rc = 2 };");
-            sb.Append("if ($sb.Length -gt 0) { $ln = $sb.ToString().TrimEnd([char]13,[char]10); if ($ln) { Write-Output ('OUT' + [char]9 + $ln) } }");
+            sb.Append("try { if ($rcText) { $rc = [int]$rcText } } catch { $rc = 2 };");
+
+            // Причину failures отдаём одной строкой ERR: иначе пользователь
+            // видит только «exit code 2» без текста ошибки агента.
+            sb.Append("$agentErr = '';");
+            sb.Append("try { $agentErr = [string](Invoke-Command -Session $poll -ScriptBlock { param($f) if (Test-Path $f) { [IO.File]::ReadAllText($f) } else { '' } } -ArgumentList $remoteErr) } catch {}");
+            sb.Append("$jobErr = '';");
+            sb.Append("try { $jobErr = [string](($job.ChildJobs | ForEach-Object { $_.JobStateInfo.Reason } | Where-Object { $_ } | ForEach-Object { if ($_ -is [System.Management.Automation.ErrorRecord]) { $_.FullyQualifiedErrorId + ': ' + $_.Exception.Message + ' @ ' + $_.InvocationInfo.PositionMessage } else { $_.ToString() } }) -join '; ') } catch {}");
+            sb.Append("if ($job.State -ne 'Completed' -or $rc -ne 0) {");
+            sb.Append("  $parts = @();");
+            sb.Append("  if ($jobErr) { $parts += ('job: ' + $jobErr.Trim()) };");
+            sb.Append("  if ($agentErr) { $parts += ('agent stderr: ' + $agentErr.Trim()) };");
+            sb.Append("  if ($parts.Count -eq 0) { $parts += ('job state=' + $job.State + '; agent exit=' + $rc) };");
+            sb.Append("  Write-Output ('ERR' + [char]9 + ($parts -join ' | '));");
+            sb.Append("}");
 
             // 6. Очистка (не мешает результату, если что-то не удалилось).
-            sb.Append("try { Invoke-Command -Session $s -ScriptBlock { param($e,$n) Remove-Item (Join-Path $env:TEMP $e) -Force -ErrorAction SilentlyContinue; Remove-Item (Join-Path $env:TEMP $n) -Force -ErrorAction SilentlyContinue } -ArgumentList '")
-              .Append(EscapeSingle(remoteExeName)).Append("','")
-              .Append(EscapeSingle(remoteOut)).Append("' | Out-Null } catch {}");
-            sb.Append("Remove-PSSession $s -ErrorAction SilentlyContinue;");
+            //    Удалённому блоку передаём уже полные пути — не его $env:TEMP.
+            sb.Append("try { Invoke-Command -Session $poll -ScriptBlock { param($e,$n,$r,$c) Remove-Item $e -Force -ErrorAction SilentlyContinue; Remove-Item $n -Force -ErrorAction SilentlyContinue; Remove-Item $r -Force -ErrorAction SilentlyContinue; Remove-Item $c -Force -ErrorAction SilentlyContinue } -ArgumentList $remoteExe, $remoteOut, $remoteErr, $remoteRc | Out-Null } catch {}");
+            sb.Append("Remove-PSSession $s, $poll -ErrorAction SilentlyContinue;");
             sb.Append("exit $rc;");
 
             // Единая точка ошибок: любая ошибка превращается в одну строку ERR\t.
@@ -227,6 +312,7 @@ namespace WinDiskMap.Core.Remote
             sb.Append("  if ($_.Exception.InnerException) { $m = $m + ' / ' + $_.Exception.InnerException.Message }");
             sb.Append("  Write-Output ('ERR' + [char]9 + $m);");
             sb.Append("  if ($s) { Remove-PSSession $s -ErrorAction SilentlyContinue }");
+            sb.Append("  if ($poll) { Remove-PSSession $poll -ErrorAction SilentlyContinue }");
             sb.Append("  exit 2;");
             sb.Append("}");
 
@@ -247,7 +333,7 @@ namespace WinDiskMap.Core.Remote
 
         public static string DefaultRemoteExePath()
         {
-            // Имя файла агента в temp удалённого хоста ($env:TEMP раскрывается на месте).
+            // Имя файла агента; полный путь строится из TEMP удалённого хоста.
             return "WinDiskMap-agent.exe";
         }
 
@@ -266,6 +352,29 @@ namespace WinDiskMap.Core.Remote
         private static string QuotePs(string s)
         {
             return "'" + EscapeSingle(s) + "'";
+        }
+
+        /// <summary>Квотирование аргумента для CreateProcess (только двойные кавычки).</summary>
+        private static string QuoteWinArg(string s)
+        {
+            if (string.IsNullOrEmpty(s)) return "\"\"";
+            if (s.IndexOf(' ') < 0 && s.IndexOf('\t') < 0 && s.IndexOf('"') < 0) return s;
+            var q = new StringBuilder("\"");
+            int slashes = 0;
+            foreach (char c in s)
+            {
+                if (c == '\\') { slashes++; continue; }
+                if (c == '"')
+                {
+                    q.Append('\\', slashes * 2 + 1).Append('"');
+                    slashes = 0;
+                    continue;
+                }
+                if (slashes > 0) { q.Append('\\', slashes); slashes = 0; }
+                q.Append(c);
+            }
+            if (slashes > 0) q.Append('\\', slashes * 2);
+            return q.Append('"').ToString();
         }
 
         private static string EscapeBlock(string s)
