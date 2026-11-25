@@ -9,7 +9,7 @@
 | `ci.yml` → `build + smoke test` | push в `main`, PR в `main`, вручную | сборку `net8.0` + `net48`, темы/версию TUI, строки `<Filtered>`, синтаксис генерируемого WinRM-скрипта и экспорт CSV через `WinDiskMap.exe --no-mft --headless` |
 | `ci.yml` → `dependency review` | только PR | новые/изменённые зависимости на известные уязвимости; порог `moderate`, итог в summary проверки |
 | `codeql.yml` → `analyze (csharp)` | push в `main`, PR в `main`, по понедельникам, вручную | статический анализ C#: `security-extended` + `security-and-quality` |
-| `release.yml` | тег `v*` или вручную | сборку архивов, при наличии SignPath — подпись, публикацию pre-release |
+| `release.yml` | тег `v*` или вручную | сборку архивов, при наличии SignPath — подпись, публикацию релиза (pre-release только для тегов с `-`) |
 
 Все внешние actions закреплены по SHA (`@<40 hex> # vX`) — это защищает цепочку сборки от
 подмены тега. Dependabot (`.github/dependabot.yml`) раз в неделю проверяет только actions.
