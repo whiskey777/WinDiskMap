@@ -6,7 +6,7 @@
 
 | Workflow | Когда запускается | Что проверяет |
 |---|---|---|
-| `ci.yml` → `build + smoke test` | push в `main`, PR в `main`, вручную | сборку `net8.0` + `net48` и экспорт CSV через `WinDiskMap.exe --no-mft --headless` |
+| `ci.yml` → `build + smoke test` | push в `main`, PR в `main`, вручную | сборку `net8.0` + `net48`, темы/версию TUI, строки `<Filtered>`, синтаксис генерируемого WinRM-скрипта и экспорт CSV через `WinDiskMap.exe --no-mft --headless` |
 | `ci.yml` → `dependency review` | только PR | новые/изменённые зависимости на известные уязвимости; порог `moderate`, итог в summary проверки |
 | `codeql.yml` → `analyze (csharp)` | push в `main`, PR в `main`, по понедельникам, вручную | статический анализ C#: `security-extended` + `security-and-quality` |
 | `release.yml` | тег `v*` или вручную | сборку архивов, при наличии SignPath — подпись, публикацию pre-release |
@@ -54,6 +54,9 @@
 
 ```powershell
 .\scripts\build.ps1
+.\scripts\verify-theme.ps1
+.\scripts\verify-tui-filtered.ps1
+.\scripts\verify-winrm-script.ps1
 .\scripts\package.ps1
 ```
 

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Reflection;
 using System.Text;
 using System.Threading;
 using WinDiskMap.Core;
@@ -20,6 +21,30 @@ namespace WinDiskMap.Tui
     /// </summary>
     internal sealed class TuiApp
     {
+        /// <summary>Версия билда из InformationalVersion (Example: 1.0.0-beta.3).</summary>
+        private static readonly string VersionLabel = ReadVersion();
+        private static readonly string VersionLabelTitle =
+            VersionLabel.Length > 0 ? " " + VersionLabel : "";
+
+        private static string ReadVersion()
+        {
+            // Чтение атрибута собственной сборки не требует catch: при отсутствии
+            // InformationalVersion fallback — четырехчисловая версия из AssemblyName.
+            var asm = typeof(TuiApp).Assembly;
+            var attrs = asm.GetCustomAttributes(typeof(AssemblyInformationalVersionAttribute), false);
+            if (attrs.Length > 0)
+            {
+                var v = ((AssemblyInformationalVersionAttribute)attrs[0]).InformationalVersion;
+                if (!string.IsNullOrWhiteSpace(v))
+                {
+                    int plus = v.IndexOf('+');
+                    return plus > 0 ? v.Substring(0, plus) : v;
+                }
+            }
+            var version = asm.GetName().Version;
+            return version != null ? version.ToString() : "";
+        }
+
         // Цвета берутся из активной темы; при переключении T достаточно одного
         // полного ререндера — остальной код работает с этими св-вами как раньше.
         private static string ColorReset { get { return Theme.Current.Reset; } }
@@ -45,6 +70,7 @@ namespace WinDiskMap.Tui
             public FileRow File;    // для файлных строк; null для папок/заглушек
             public bool IsDir;
             public bool Hint;       // строка-заглушка для пустых/скрытых фильтром папок
+            public bool ShowMeta;   // у <Filtered> показываем размеры скрытых файлов
             public int Depth;
             public string Prefix;
             public string Name;
@@ -610,21 +636,47 @@ namespace WinDiskMap.Tui
         private void AppendChildren(Node dir, string childPrefix)
         {
             List<Node> dirs = SortedDirs(dir);
-            List<FileRow> files = _filter == FilterMode.Folders ? EmptyFiles : FilteredFiles(dir);
 
-            int total = dirs.Count + files.Count;
+            // Материализуем файлы один раз и сразу считаем то, что спрятано фильтром.
+            // Иначе в режиме «только папки» размер скрытых данных был бы недоступен.
+            List<FileRow> all = _s.Done && _filter != FilterMode.Files
+                ? dir.GetFileRows()
+                : null;
+            List<FileRow> files = _filter == FilterMode.Folders
+                ? EmptyFiles
+                : FilteredFiles(dir, all);
+
+            long hiddenSize = 0;
+            long newestCreated = 0;
+            long newestWrite = 0;
+            int hiddenCount = 0;
+            if (all != null)
+            {
+                for (int i = 0; i < all.Count; i++)
+                {
+                    FileRow f = all[i];
+                    bool hidden = _filter == FilterMode.Folders
+                        || (_filter == FilterMode.Temp && f.Category != Category.Temp)
+                        || (_filter == FilterMode.Dumps && f.Category != Category.Dump);
+                    if (!hidden) continue;
+                    hiddenCount++;
+                    hiddenSize += f.Size;
+                    if (f.CreatedUtc > newestCreated) newestCreated = f.CreatedUtc;
+                    if (f.LastWriteUtc > newestWrite) newestWrite = f.LastWriteUtc;
+                }
+            }
+
+            bool addFiltered = hiddenCount > 0;
+            int total = dirs.Count + files.Count + (addFiltered ? 1 : 0);
             if (total == 0)
             {
-                // Три состояния: во время скана "..." (данные могут ещё появиться),
-                // после — "<Пусто>" если папка реально пуста, иначе "<Отфильтровано>"
-                // (объекты есть, но активный фильтр их скрывает).
+                // Во время скана данные могут ещё появиться — показываем "...".
+                // После завершения "<Пусто>" означает реально пустую папку.
                 if (dir.Expanded)
                 {
                     string hint = !_s.Done
                         ? "..."
-                        : (dir.Dirs.Count == 0 && dir.FileCount == 0)
-                            ? Loc.T("<Пусто>", "<Empty>")
-                            : Loc.T("<Отфильтровано>", "<Filtered>");
+                        : Loc.T("<Пусто>", "<Empty>");
                     _rows.Add(new Row
                     {
                         Hint = true,
@@ -683,15 +735,35 @@ namespace WinDiskMap.Tui
                     Category = file.Category
                 });
             }
+
+            if (addFiltered)
+            {
+                _rows.Add(new Row
+                {
+                    Hint = true,
+                    ShowMeta = true,
+                    IsDir = false,
+                    Parent = dir,
+                    Depth = dir.Depth + 1,
+                    Prefix = childPrefix + "└─ ",
+                    Name = Loc.T("<Отфильтровано>", "<Filtered>")
+                           + " (" + Format.Number(hiddenCount) + ")",
+                    FullPath = dir.FullPath + "\\...",
+                    Size = hiddenSize,
+                    CreatedUtc = newestCreated,
+                    LastWriteUtc = newestWrite,
+                    Category = Category.File
+                });
+            }
         }
 
         private static readonly List<FileRow> EmptyFiles = new List<FileRow>();
 
-        private List<FileRow> FilteredFiles(Node dir)
+        private List<FileRow> FilteredFiles(Node dir, List<FileRow> all = null)
         {
             // GetFileRows() возвращает кэшированный список, отсортированный по убыванию
             // размера, — его нельзя менять на месте. Всегда делаем свою копию.
-            List<FileRow> all = dir.GetFileRows();
+            if (all == null) all = dir.GetFileRows();
             var result = new List<FileRow>(all.Count);
             for (int i = 0; i < all.Count; i++)
             {
@@ -837,7 +909,10 @@ namespace WinDiskMap.Tui
                 ? Format.Number(_filesDone)
                 : Format.Number(_s.Progress.Files);
 
-            string text = " WinDiskMap │ " + _root.FullPath
+            string title = " WinDiskMap"
+                + (VersionLabel.Length > 0 ? " " + VersionLabel : "")
+                + " │ ";
+            string text = title + _root.FullPath
                 + " │ " + (done ? Loc.T("Итого", "Total") : Loc.T("Идёт сканирование", "Scanning"))
                 + ": " + Format.Bytes(_root.Size)
                 + " │ " + Loc.T("Файлов", "Files") + ": " + files
@@ -935,7 +1010,7 @@ namespace WinDiskMap.Tui
 
         private void AppendRowLine(StringBuilder sb, Row row, bool cursor, int width, Columns c)
         {
-            string meta = row.Hint ? "" : BuildMeta(row, c, _root.Size);
+            string meta = row.Hint && !row.ShowMeta ? "" : BuildMeta(row, c, _root.Size);
 
             string color = row.Hint ? ColorDim : ColorFor(row.Category);
 
@@ -1026,8 +1101,9 @@ namespace WinDiskMap.Tui
             sb.Append(ColorHeader);
             sb.Append(PadOrTruncate(
                 _s.Error != null
-                    ? " WinDiskMap "
-                    : " WinDiskMap — " + Loc.T("Идёт сканирование", "Scanning") + " ",
+                    ? " WinDiskMap" + VersionLabelTitle + " "
+                    : " WinDiskMap" + VersionLabelTitle + " — "
+                      + Loc.T("Идёт сканирование", "Scanning") + " ",
                 width));
             sb.Append(ColorReset);
             sb.Append("\x1b[K\r\n\r\n");
@@ -1047,7 +1123,7 @@ namespace WinDiskMap.Tui
             }
 
             char[] spin = { '|', '/', '-', '\\' };
-            int tick = Environment.TickCount / 120 % 4;
+            int tick = SpinnerIndex(Environment.TickCount);
             sb.Append("  ");
             sb.Append(spin[tick]);
             sb.Append("  ");
@@ -1132,6 +1208,15 @@ namespace WinDiskMap.Tui
             catch { return 30; }
         }
 
+        /// <summary>
+        /// Индекс спиннера 0..3. Environment.TickCount — Int32 и уходит в минус
+        /// после ~24.86 суток аптайма; беззнаковое деление не даёт отрицательный остаток.
+        /// </summary>
+        internal static int SpinnerIndex(int tickCount)
+        {
+            return (int)(((uint)tickCount / 120u) % 4u);
+        }
+
         private static void EnableMouse(bool on)
         {
             try { Console.Write(on ? "\x1b[?1000h\x1b[?1006h" : "\x1b[?1006l\x1b[?1000l"); }
@@ -1147,7 +1232,8 @@ namespace WinDiskMap.Tui
             sb.Append("\x1b[H");
             sb.Append(ColorHeader);
             sb.Append(PadOrTruncate(
-                " WinDiskMap — " + Loc.T("Идёт сканирование", "Scanning") + " ", width));
+                " WinDiskMap" + VersionLabelTitle + " — "
+                + Loc.T("Идёт сканирование", "Scanning") + " ", width));
             sb.Append(ColorReset);
             sb.Append("\x1b[K\r\n\r\n");
 

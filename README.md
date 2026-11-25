@@ -52,8 +52,8 @@ cd WinDiskMap
 
 | Архив | Что внутри | Когда выбирать |
 |---|---|---|
-| `WinDiskMap-portable-net48-v1.0.0-beta.2.zip` | `WinDiskMap.exe` (~50 КБ), использует .NET Framework 4.8, встроенный в Windows | Обычный выбор на Windows 10/11/Server. Именно этот EXE WinRM-транспорт копирует на удалённый хост как агента. |
-| `WinDiskMap-portable-win-x64-selfcontained-v1.0.0-beta.2.zip` | один `WinDiskMap.exe` (~30 МБ) со встроенным .NET 8 | Нужен, если на машине нет .NET 8 и не хочется зависеть от системного Framework. |
+| `WinDiskMap-portable-net48-v1.0.0-beta.3.zip` | `WinDiskMap.exe` (~50 КБ), использует .NET Framework 4.8, встроенный в Windows | Обычный выбор на Windows 10/11/Server. Именно этот EXE WinRM-транспорт копирует на удалённый хост как агента. |
+| `WinDiskMap-portable-win-x64-selfcontained-v1.0.0-beta.3.zip` | один `WinDiskMap.exe` (~30 МБ) со встроенным .NET 8 | Нужен, если на машине нет .NET 8 и не хочется зависеть от системного Framework. |
 
 Оба архива функционально одинаковы — разница только в runtime. Они распаковываются в любую
 папку, ничего не устанавливают и не пишут в реестр; внутри — `WinDiskMap.exe`, `README.txt`,
@@ -147,9 +147,10 @@ File name,Size,On disk,Modified,Attributes,Files,Folders,Depth,Parent,Name,Categ
 
 - Только Windows (P/Invoke `kernel32`/`user32`, прямое чтение `$MFT`).
 - MFT-режим требует прав администратора и локального NTFS; для UNC всегда используется обход.
-- WinRM требует настройки хоста. Архивы из Releases подписываются через SignPath после одобрения
-  запроса; сборки из исходников неподписаны — в корпоративной среде возможны предупреждения
-  SmartScreen/EDR (см. [сборку](docs/BUILD.md)).
+- WinRM требует настройки хоста и сейчас работает медленно (проверен на Windows Server 2016);
+  MFT на удалённом хосте не используется. Архивы из Releases подписываются через SignPath
+  после одобрения запроса; сборки из исходников неподписаны — в корпоративной среде возможны
+  предупреждения SmartScreen/EDR (см. [сборку](docs/BUILD.md)).
 
 ## Лицензия
 
